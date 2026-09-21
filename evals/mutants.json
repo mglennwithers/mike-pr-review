@@ -384,6 +384,96 @@
       "file": "scripts/cmd/publish.mjs",
       "from": "record the review with \\`prr post --run \"${R.ctx.run_dir}\" --event NONE\\`",
       "to": "record the review with \\`prr post --run ${R.ctx.run_dir} --event NONE\\`"
+    },
+    {
+      "name": "log: the PR author is recorded",
+      "file": "scripts/lib/metrics.mjs",
+      "from": "{ login: ctx.pr.author || null, own_pr:",
+      "to": "{ login: null, own_pr:"
+    },
+    {
+      "name": "log: local reviews record other committers",
+      "file": "scripts/lib/metrics.mjs",
+      "from": "other_committers: ctx.local.foreign_authors || 0",
+      "to": "other_committers: 0"
+    },
+    {
+      "name": "collect: the count of other committers reaches the log",
+      "file": "scripts/cmd/collect.mjs",
+      "from": "  ctx.local.foreign_authors = others.length\n",
+      "to": ""
+    },
+    {
+      "name": "log: complexity records the raw line count",
+      "file": "scripts/lib/metrics.mjs",
+      "from": "raw_lines: ctx.stats.added + ctx.stats.deleted",
+      "to": "raw_lines: 0"
+    },
+    {
+      "name": "log: complexity records effective lines by file kind",
+      "file": "scripts/lib/metrics.mjs",
+      "from": "by_kind: ctx.stats.by_kind || {}",
+      "to": "by_kind: {}"
+    },
+    {
+      "name": "log: complexity records how many lens agents ran",
+      "file": "scripts/lib/metrics.mjs",
+      "from": "lens_agents: plan.lens_tasks.length",
+      "to": "lens_agents: 0"
+    },
+    {
+      "name": "log: findings are counted by category",
+      "file": "scripts/lib/metrics.mjs",
+      "from": "by_category: tally('category')",
+      "to": "by_category: {}"
+    },
+    {
+      "name": "log: findings are counted by verification status",
+      "file": "scripts/lib/metrics.mjs",
+      "from": "by_status: byStatus",
+      "to": "by_status: {}"
+    },
+    {
+      "name": "log: a finding never sent to a verifier is not counted as confirmed",
+      "file": "scripts/lib/metrics.mjs",
+      "from": "(f.skipped_verification ? 'not_verified_nit' :",
+      "to": "(false ?"
+    },
+    {
+      "name": "log: a refuted finding is counted as refuted",
+      "file": "scripts/lib/metrics.mjs",
+      "from": ": f.bucket === 'refuted' ? 'refuted' :",
+      "to": ": false ?"
+    },
+    {
+      "name": "log: findings are counted by the decision you made",
+      "file": "scripts/lib/metrics.mjs",
+      "from": "by_decision: tally('decision')",
+      "to": "by_decision: {}"
+    },
+    {
+      "name": "stats: reports findings by type",
+      "file": "scripts/cmd/stats.mjs",
+      "from": "if (A.types.runs) {",
+      "to": "if (false) {"
+    },
+    {
+      "name": "stats: reports change complexity",
+      "file": "scripts/cmd/stats.mjs",
+      "from": "if (A.complexity.runs) {",
+      "to": "if (false) {"
+    },
+    {
+      "name": "stats: reports the authors reviewed",
+      "file": "scripts/cmd/stats.mjs",
+      "from": "if (authorRows.length) {",
+      "to": "if (false) {"
+    },
+    {
+      "name": "stats: only runs that recorded the breakdown are counted in it",
+      "file": "scripts/cmd/stats.mjs",
+      "from": "const typed = runs.filter((r) => r.findings_by)",
+      "to": "const typed = runs"
     }
   ]
 }

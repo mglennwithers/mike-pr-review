@@ -86,9 +86,40 @@ export function aggregate(events, f = {}) {
   if (funnel.unverified) notes.push(`${funnel.unverified} finding(s) could not be verified because verifier agents failed — those runs were reported as incomplete.`)
   if (human.followed_up >= 5) notes.push(`Authors fixed ${pct(human.addressed, human.followed_up)} of posted findings that were later re-checked (${human.addressed}/${human.followed_up}) — the best available proxy for real-world precision.`)
 
+  // Findings counted by type, by final severity and by what verification concluded about them. Runs recorded before
+  // these fields existed simply do not contribute, so the report can say how many runs are behind the numbers.
+  const typed = runs.filter((r) => r.findings_by)
+  const sumMaps = (pick) => { const o = {}; for (const r of typed) for (const [k, v] of Object.entries(pick(r) || {})) o[k] = (o[k] || 0) + v; return o }
+  const types = { runs: typed.length, total: typed.reduce((s, r) => s + (r.findings_by.total || 0), 0),
+    by_category: sumMaps((r) => r.findings_by.by_category), by_severity: sumMaps((r) => r.findings_by.by_severity),
+    by_status: sumMaps((r) => r.findings_by.by_status), by_decision: sumMaps((r) => r.findings_by.by_decision) }
+
+  const cx = runs.filter((r) => r.complexity)
+  const cAvg = (pick) => (cx.length ? Math.round(cx.reduce((s, r) => s + (pick(r.complexity) || 0), 0) / cx.length) : 0)
+  const kindLines = {}, criticalAreas = {}
+  for (const r of cx) {
+    for (const [k, v] of Object.entries(r.complexity.by_kind || {})) kindLines[k] = (kindLines[k] || 0) + v
+    for (const a of r.complexity.critical_areas || []) criticalAreas[a] = (criticalAreas[a] || 0) + 1
+  }
+  const complexity = { runs: cx.length, avg_effective_lines: cAvg((c) => c.effective_lines), avg_raw_lines: cAvg((c) => c.raw_lines), avg_files: cAvg((c) => c.files),
+    avg_commits: cAvg((c) => c.commits), avg_risk_points: cAvg((c) => c.risk_points), avg_lens_agents: cAvg((c) => c.lens_agents), avg_largest_shard: cAvg((c) => c.largest_shard),
+    effective_lines_by_kind: kindLines, critical_areas: criticalAreas }
+
+  // Per author of a reviewed PR. Local only, like everything in this log.
+  const authors = {}
+  for (const r of runs) {
+    const login = r.author && r.author.login
+    if (!login) continue
+    const a = (authors[login] ||= { reviews: 0, verified: 0, posted: 0, own_prs: 0, from_fork: 0, effective_lines: 0 })
+    a.reviews++; a.verified += r.funnel.verified || 0; a.posted += (r.decisions && r.decisions.posted) || 0
+    if (r.author.own_pr) a.own_prs++
+    if (r.author.from_fork) a.from_fork++
+    a.effective_lines += (r.complexity && r.complexity.effective_lines) || (r.size && r.size.effective) || 0
+  }
+
   return { scope: { since: f.since || 'all time', profile: f.profile || null, repo: f.repo || null, mode: f.mode || null }, runs: runs.length, fixture_runs: allRuns.length - allRuns.filter((r) => !r.fixture).length, measured: measured.length,
     spend: { sub_agents: subCost, orchestrator: orchCost, tokens: measured.reduce((s, r) => s + r.usage.tokens, 0), cost_per_verified_finding: cps, median_run: median(measured.map((r) => r.usage.cost)) },
-    grid, stage, model, funnel, lens, human, benchmarks: [...bench.values()], notes }
+    grid, stage, model, funnel, types, complexity, authors, lens, human, benchmarks: [...bench.values()], notes }
 }
 
 export default function stats(argv) {
@@ -114,6 +145,33 @@ export default function stats(argv) {
   const f = A.funnel
   L.push('', '## Finding funnel', '', `${f.raised} raised by lenses → ${f.distinct} distinct → **${f.verified} verified** (${pct(f.verified, f.distinct)}) · ${f.below_bar} below the bar · ${f.refuted} refuted or pre-existing · ${f.unverified} unverifiable · ${f.suppressed} duplicates suppressed${f.dropped ? ` · ${f.dropped} dropped by candidate caps` : ''}`,
     `Verifier votes: ${f.votes} (${pct(f.vote_confirmed, f.votes)} confirmed, ${pct(f.vote_refuted, f.votes)} refuted) · ${f.reproduced} finding(s) proven by running code · ${f.tiebreaks} tiebreak(s) · ${f.clean_runs} clean review(s) · ${f.incomplete_runs} incomplete`)
+  if (A.types.runs) {
+    const share = (obj, title, note) => {
+      const entries = Object.entries(obj).sort((a, b) => b[1] - a[1])
+      if (!entries.length) return
+      const total = entries.reduce((n, [, v]) => n + v, 0)
+      L.push('', `### ${title}`, ...(note ? [`_${note}_`] : []), '', '| | Findings | Share |', '|---|---|---|')
+      for (const [k, v] of entries) row(k, v, pct(v, total))
+    }
+    L.push('', `## Findings by type`, '', `${A.types.total} finding(s) across ${A.types.runs} run(s) that recorded this breakdown${A.types.runs < A.runs ? ` (of ${A.runs}; older runs predate it)` : ''}.`)
+    share(A.types.by_category, 'By category')
+    share(A.types.by_severity, 'By severity after verification', 'what the finding ended as — a verifier may downgrade what its lens claimed')
+    share(A.types.by_status, 'By verification status', 'one row per finding, unlike the vote counts above: three verifiers on one finding are one finding here')
+    share(A.types.by_decision, 'By what you decided')
+  }
+  if (A.complexity.runs) {
+    const c = A.complexity
+    L.push('', '## Change complexity', '', `Average of ${c.runs} run(s): **${c.avg_effective_lines} effective lines** (${c.avg_raw_lines} raw) in ${c.avg_files} file(s) over ${c.avg_commits} commit(s) · ${c.avg_risk_points} risk point(s) · ${c.avg_lens_agents} lens agent(s), largest shard ${c.avg_largest_shard} lines.`)
+    const kinds = Object.entries(c.effective_lines_by_kind).sort((a, b) => b[1] - a[1])
+    if (kinds.length) L.push('', `Effective lines by file kind: ${kinds.map(([k, v]) => `${k} ${v}`).join(' · ')}.`)
+    const areas = Object.entries(c.critical_areas).sort((a, b) => b[1] - a[1])
+    if (areas.length) L.push(`Critical areas touched: ${areas.map(([k, v]) => `${k} (${v} run(s))`).join(' · ')}.`)
+  }
+  const authorRows = Object.entries(A.authors).sort((a, b) => b[1].reviews - a[1].reviews)
+  if (authorRows.length) {
+    L.push('', '## Authors reviewed', '', '| Author | Reviews | Effective lines | Verified findings | Posted | Own PRs | From a fork |', '|---|---|---|---|---|---|---|')
+    for (const [login, a] of authorRows) row(`@${login}`, a.reviews, a.effective_lines, a.verified, a.posted, a.own_prs, a.from_fork)
+  }
   if (Object.keys(A.lens).length) {
     L.push('', '## Lens scoreboard', '', '| Lens | Runs | Raised | Verified | Precision | Refuted | Posted | You dismissed | Author fixed | Cost | Cost / verified |', '|---|---|---|---|---|---|---|---|---|---|---|')
     for (const [k, x] of Object.entries(A.lens).sort((a, b) => b[1].verified - a[1].verified || b[1].raised - a[1].raised)) row(k, `${x.runs}${x.failed ? ` (${x.failed} failed)` : ''}`, x.raised, x.minor ? `${x.verified} (${x.minor} minor)` : x.verified, pct(x.verified, x.raised - x.not_verified), x.refuted, x.posted, x.dismissed, x.addressed + x.still_open ? `${x.addressed}/${x.addressed + x.still_open}` : '—', fmtCost(x.cost), x.verified ? fmtCost(x.cost / x.verified) : '—')

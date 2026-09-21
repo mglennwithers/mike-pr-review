@@ -330,6 +330,7 @@ function collectLocal(ctx, scope, args, cwd, runDir) {
   // are checked against the identity git would commit with here. (Fixture repositories are made by `prr fixture`.)
   const me = (G.gitOut(root, ['var', 'GIT_AUTHOR_IDENT'], { allowFail: true }).match(/<([^>]*)>/) || [])[1] || ''
   const others = scope === 'uncommitted' || scope === 'staged' || ctx.fixture ? [] : Array.from(new Set(G.gitOut(root, ['log', '--format=%ae', `${from}..${headSha}`], { allowFail: true }).split('\n').map((s) => s.trim()).filter((e) => e && e.toLowerCase() !== me.toLowerCase())))
+  ctx.local.foreign_authors = others.length
   ctx.trust = others.length
     ? { run_code: false, reason: `this branch contains commits by ${others.slice(0, 3).join(', ')}${others.length > 3 ? ` and ${others.length - 3} more` : ''}, not only by you (${me || 'no git identity configured'}): their code is not executed unless you vouch for it (--trust-code)` }
     : { run_code: true, reason: ctx.fixture ? 'benchmark fixture' : 'your own local work' }

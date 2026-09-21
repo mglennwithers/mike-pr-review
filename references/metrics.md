@@ -26,7 +26,10 @@ Treat the estimate as an order of magnitude and quote the line when telling the 
 Recorded for every finished review (`prr post`, including `--event NONE`):
 - **Funnel** — raised by lenses → distinct → verified (≥ posting bar) / verified but *minor* (true, under the importance floor, not offered for posting) / *not-verified nits* (only with `plan --verify-floor` or a `verify_min_importance` above 0: should-fix findings their own lens rated under the floor — listed for the user, never sent to a verifier, left out of lens precision) / below the bar / refuted / pre-existing / unverifiable / suppressed as duplicates. Every finding is logged with its importance as well as its confidence.
 - **Per-lens results** — raised, verified, minor, refuted, posted, dismissed, cost. A lens whose verified findings are mostly minor is accurate but not earning its cost. *Precision* of a lens = verified ÷ raised: how much of what it says survives an adversary.
-- **Verification** — votes, confirmed vs refuted, findings proven by actually running code, tiebreaks.
+- **Verification** — votes, confirmed vs refuted, findings proven by actually running code, tiebreaks. These count VOTES: three verifiers on one finding are three votes.
+- **Findings by type** (`findings_by`) — the same findings counted once each: by category (correctness, security, tests …), by the severity they ENDED with after verification, by bucket, by what verification concluded (`confirmed`, `contested`, `uncertain`, `refuted`, `pre_existing`, `unverified` when its verifiers died, `not_verified_nit` when its own lens rated it too minor to verify) and by your decision. Use these, not the vote counts, to answer "how many findings were confirmed".
+- **Who wrote the change** (`author`) — for a PR: the author login, whether it is the user own PR, a draft, from a fork, and whether its code was allowed to run. For a local review: the branch, how many other people have commits on it, and no login.
+- **Complexity** (`complexity`) — tier, effective and raw lines, files and reviewable files, effective lines per file kind, risk points, which critical areas were touched, commits, how many lens agents ran, the largest shard, and what the GitHub API itself reported for the PR size.
 - **The user's decisions** — posted, held back ("not now"), dismissed as wrong, and whether they followed the recommended action.
 
 Recorded later, as ground truth trickles in:
@@ -40,7 +43,7 @@ What real PRs can never show is **recall** — what the review missed. That is w
 ```
 prr stats [--since 30d|8w|6m|<YYYY-MM-DD>] [--profile <name>] [--repo owner/name] [--mode pr|local] [--include-fixtures] [--json]
 ```
-Prints: cost by profile × change size, where the spend goes (stage, model), the finding funnel, the lens scoreboard (precision, author-fix rate, cost per verified finding), human signal, benchmark results (the latest per fixture × profile × variant), and plain-language observations (a noisy lens, a lens that never finds anything, verification or orchestrator share too high). Show the tables as printed and add your own reading of them. Benchmark runs are kept out of the production numbers unless `--include-fixtures` is given. With few runs in a cell, say so: the averages mean little.
+Prints: cost by profile × change size, where the spend goes (stage, model), the finding funnel, findings by category / final severity / verification status / decision, change complexity, the authors whose PRs were reviewed, the lens scoreboard (precision, author-fix rate, cost per verified finding), human signal, benchmark results (the latest per fixture × profile × variant), and plain-language observations (a noisy lens, a lens that never finds anything, verification or orchestrator share too high). Show the tables as printed and add your own reading of them. Benchmark runs are kept out of the production numbers unless `--include-fixtures` is given. With few runs in a cell, say so: the averages mean little.
 
 ## Benchmark: seeded bugs with an answer key
 

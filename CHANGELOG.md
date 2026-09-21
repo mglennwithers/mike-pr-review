@@ -13,5 +13,6 @@ Initial release.
 - Measured usage and cost, `prr stats`, seeded-bug fixtures with `prr fixture` / `prr score`.
 - `prr selftest` (offline, includes a fake GitHub server) and `prr mutate` (mutation check on a copy).
 - Released under the MIT licence.
+- Every review record also logs the PR author, the change's complexity, and findings counted per finding by category, final severity, verification status and your decision; `prr stats` reports all three.
 - Git commands are shielded from the user's git configuration (hooks, diff settings, signing, identity, prompts).
 - Optional PreToolUse hook `scripts/hooks/ask-before-post.mjs`; `prr trust`, `prr version`; state home: `PR_REVIEW_HOME`, then `CLAUDE_CONFIG_DIR`, then `~/.claude`.

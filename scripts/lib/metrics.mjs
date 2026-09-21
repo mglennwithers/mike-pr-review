@@ -100,6 +100,13 @@ export function runRecord(R, { event, postedFps, dismissedFps, usage, prior }) {
     if (f.decision === 'dismissed') s.dismissed++
   }
   const nb = (bucket, also = () => true) => findings.filter((f) => f.bucket === bucket && also(f)).length
+  // Counts of FINDINGS by the axes a reader asks about after the fact. `by_status` is per finding (what the verifiers
+  // concluded about it); the `verification` block below counts individual VOTES, which is a different number — three
+  // verifiers on one finding are three votes. Carried-over findings are counted: they were raised in this run too.
+  const tally = (key) => { const o = {}; for (const f of findings) { const k = f[key] || 'unknown'; o[k] = (o[k] || 0) + 1 } return o }
+  const statusOf = (f) => (f.skipped_verification ? 'not_verified_nit' : f.bucket === 'unverified' ? 'unverified' : f.bucket === 'refuted' ? 'refuted' : f.bucket === 'pre_existing' ? 'pre_existing' : f.status || 'unknown')
+  const byStatus = {}
+  for (const f of findings) { const k = statusOf(f); byStatus[k] = (byStatus[k] || 0) + 1 }
   const votes = results.findings.flatMap((f) => f.votes || [])
   const chosen = event === 'NONE' ? 'NONE' : event
   return {
@@ -107,6 +114,15 @@ export function runRecord(R, { event, postedFps, dismissedFps, usage, prior }) {
     mode: ctx.mode, repo: ctx.repo.owner ? `${ctx.repo.owner}/${ctx.repo.name}` : ctx.repo.name, profile: plan.profile, tier: plan.tier, engine: results.engine || 'unknown',
     incremental: !!ctx.range.incremental, rebased: !!ctx.range.rebased, fixture: ctx.fixture || null,
     size: { files: ctx.stats.files, reviewable: ctx.stats.reviewable_files, added: ctx.stats.added, deleted: ctx.stats.deleted, effective: ctx.stats.effective_lines, risk_points: ctx.stats.risk_points },
+    // Who wrote the change under review. Local only, like the rest of this log; `prr stats` never groups by it unless asked.
+    author: ctx.mode === 'pr'
+      ? { login: ctx.pr.author || null, own_pr: !!ctx.pr.is_own, draft: !!ctx.pr.draft, from_fork: ctx.pr.same_repo === false, trusted_to_run_code: !!ctx.trust.run_code }
+      : { login: null, own_pr: !ctx.local.foreign_authors, branch: ctx.local.branch || null, other_committers: ctx.local.foreign_authors || 0, trusted_to_run_code: !!ctx.trust.run_code },
+    // Everything that made this change big or risky, in one place: the tier is a verdict, these are what produced it.
+    complexity: { tier: plan.tier, effective_lines: ctx.stats.effective_lines, raw_lines: ctx.stats.added + ctx.stats.deleted, files: ctx.stats.files, reviewable_files: ctx.stats.reviewable_files,
+      by_kind: ctx.stats.by_kind || {}, risk_points: ctx.stats.risk_points, critical_areas: (ctx.stats.critical || []).slice(), signals: ctx.signals.length,
+      commits: (ctx.range.commits || []).length, lens_agents: plan.lens_tasks.length, largest_shard: (plan.sharding && plan.sharding.largest_shard) || ctx.stats.effective_lines,
+      pr_reported: ctx.mode === 'pr' ? { additions: ctx.pr.additions ?? null, deletions: ctx.pr.deletions ?? null, changed_files: ctx.pr.changed_files ?? null } : null },
     signals: ctx.signals.map((s) => s.name), lenses_planned: Array.from(new Set(plan.lens_tasks.map((t) => t.lens))), lenses_skipped: plan.skipped.map((s) => s.lens),
     funnel: { raised: R.stats.raised, distinct: R.stats.candidates, verified: nb('post', (f) => !f.carried), minor: nb('minor', (f) => !f.skipped_verification), not_verified_nits: nb('minor', (f) => f.skipped_verification), below_bar: nb('watch'), refuted: nb('refuted'), pre_existing: nb('pre_existing'), unverified: nb('unverified'),
       suppressed: nb('suppressed') + buckets.suppressed.filter((f) => !f.fp).length, dropped: (results.dropped || []).length, carried: nb('post', (f) => f.carried) },
@@ -114,6 +130,9 @@ export function runRecord(R, { event, postedFps, dismissedFps, usage, prior }) {
       tiebreaks: votes.filter((v) => v.stance === 'tiebreak').length, reproduced: results.findings.filter((f) => f.reproduced).length, tests_run: results.findings.reduce((n, f) => n + (f.tests || []).length, 0) },
     light: R.light, incomplete: R.holes.length > 0, recommended: R.recommend, chosen, agreed: R.recommend === chosen,
     decisions: { posted: findings.filter((f) => f.decision === 'posted').length, pending: findings.filter((f) => f.decision === 'pending').length, dismissed: findings.filter((f) => f.decision === 'dismissed').length },
+    // Findings counted three ways. by_category / by_severity use the severity a finding ENDED with (verifiers may
+    // downgrade); `raised_as` on each entry of `findings` keeps what its lens claimed.
+    findings_by: { total: findings.length, by_category: tally('category'), by_severity: tally('severity'), by_bucket: tally('bucket'), by_status: byStatus, by_decision: tally('decision') },
     lens_stats: lensStats, findings, usage: slimUsage(usage, plan, ctx),
   }
 }
