@@ -1,7 +1,9 @@
 # Security
 
-Report a vulnerability through GitHub private vulnerability reporting (the Security tab). Please do not open a public issue for anything
-exploitable. There is no bounty; expect a reply when the maintainer next has time, not within a fixed window.
+Report a vulnerability through GitHub's **private vulnerability reporting**: the *Report a vulnerability* button under
+this repository's **Security** tab. That opens a channel only you and the maintainer can read. Please do not open a
+public issue for anything exploitable. There is no bounty; expect a reply when the maintainer next has time, not within
+a fixed window.
 
 Supported version: the latest release (see `VERSION`). Nothing older is patched.
 
