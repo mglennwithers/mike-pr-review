@@ -1,0 +1,3 @@
+* text=auto eol=lf
+# built by `prr build-workflow` from the template and scripts/lib/core.mjs — never edited by hand
+workflows/review.workflow.js linguist-generated=true

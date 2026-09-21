@@ -1,0 +1,389 @@
+{
+  "_doc": "Deliberate breakages for `prr mutate`: each one undoes a single behaviour; the selftest must fail when it is applied (to a copy — never to the live skill). `from` must occur exactly once in `file` (`prr mutate --check`, also enforced by the selftest). Add one whenever you fix a bug: it proves the new test bites.",
+  "mutants": [
+    {
+      "name": "post: a failed state save after a real post is reported as POSTED_NOT_RECORDED, not rethrown",
+      "file": "scripts/cmd/publish.mjs",
+      "from": "if (!posted || args.record_only) throw e",
+      "to": "throw e"
+    },
+    {
+      "name": "workflow: a dead critic is listed in chores_failed",
+      "file": "workflows/review.workflow.template.js",
+      "from": "  choresFailed.push(name)\n",
+      "to": "  if (name !== 'critic') choresFailed.push(name)\n"
+    },
+    {
+      "name": "workflow: a dead brief is listed in chores_failed",
+      "file": "workflows/review.workflow.template.js",
+      "from": "  choresFailed.push(name)\n",
+      "to": "  if (name !== 'brief') choresFailed.push(name)\n"
+    },
+    {
+      "name": "workflow: a dead critic round is not followed by another round",
+      "file": "workflows/review.workflow.template.js",
+      "from": "if (!c) { log(`critic round ${round}: did NOT run`); break }",
+      "to": "if (!c) { log(`critic round ${round}: did NOT run`); continue }"
+    },
+    {
+      "name": "report: notice when the completeness critic did not run",
+      "file": "scripts/lib/report.mjs",
+      "from": "includes('critic')) notices.push",
+      "to": "includes('critic-x')) notices.push"
+    },
+    {
+      "name": "report: notice when the brief did not run",
+      "file": "scripts/lib/report.mjs",
+      "from": "includes('brief')) notices.push",
+      "to": "includes('brief-x')) notices.push"
+    },
+    {
+      "name": "plan: a lens requested by name survives the agent budget",
+      "file": "scripts/cmd/plan.mjs",
+      "from": "wanted.map((w) => w.why !== 'requested').lastIndexOf(true)",
+      "to": "wanted.map(() => true).lastIndexOf(true)"
+    },
+    {
+      "name": "plan: heuristically woken lenses are still dropped for the agent budget",
+      "file": "scripts/cmd/plan.mjs",
+      "from": "    if (at < 0) break\n",
+      "to": "    if (at < 0 || true) break\n"
+    },
+    {
+      "name": "plan: a plan in which no lens runs counts zero agents",
+      "file": "scripts/cmd/plan.mjs",
+      "from": "total: 0, tokens: 0, cost: 0, note: 'no lens will run'",
+      "to": "total: 1, tokens: 0, cost: 0, note: 'no lens will run'"
+    },
+    {
+      "name": "prune: a recently touched run directory is never removed",
+      "file": "scripts/lib/util.mjs",
+      "from": "return now - lastTouched(dir) >= minAgeHours * 3600e3",
+      "to": "return true"
+    },
+    {
+      "name": "prune: files written inside a run count as recent activity",
+      "file": "scripts/lib/util.mjs",
+      "from": "for (const e of fs.readdirSync(dir)) { try { t =",
+      "to": "for (const e of []) { try { t ="
+    },
+    {
+      "name": "prune: old untouched runs beyond the newest 20 are removed",
+      "file": "scripts/lib/util.mjs",
+      "from": "return now - lastTouched(dir) >= minAgeHours * 3600e3",
+      "to": "return false"
+    },
+    {
+      "name": "state: saveState runs under the lock file",
+      "file": "scripts/lib/state.mjs",
+      "from": "return withLock(statePath(state.key), () => saveStateLocked(state))",
+      "to": "return saveStateLocked(state)"
+    },
+    {
+      "name": "post: an ordinary pre-existing finding cannot be posted by id",
+      "file": "scripts/cmd/publish.mjs",
+      "from": "R.buckets.pre_existing.filter((f) => f.reintroduced && clears(f))",
+      "to": "R.buckets.pre_existing.filter((f) => clears(f))"
+    },
+    {
+      "name": "report: a reintroduced pre-existing finding is flagged in the report",
+      "file": "scripts/lib/report.mjs",
+      "from": "${f.reintroduced ? ` — **raised",
+      "to": "${false ? ` — **raised"
+    },
+    {
+      "name": "github summary: the brief text is scrubbed of local paths",
+      "file": "scripts/lib/report.mjs",
+      "from": "L.push(scrub(R.results.brief.summary), '')",
+      "to": "L.push(R.results.brief.summary, '')"
+    },
+    {
+      "name": "graphql: a reply without data is an error",
+      "file": "scripts/lib/github.mjs",
+      "from": "if (!res || !res.data) throw new Error(",
+      "to": "if (false) throw new Error("
+    },
+    {
+      "name": "thread states: a failed query is returned as an error, not as an empty map",
+      "file": "scripts/lib/github.mjs",
+      "from": "catch (e) { return { states, error: String(e && e.message) } }",
+      "to": "catch (e) { return { states, error: null } }"
+    },
+    {
+      "name": "snapshot: the throwaway index is removed when a git step fails",
+      "file": "scripts/lib/git.mjs",
+      "from": "  } finally {\n    fs.rmSync(tmpIndex, { force: true })\n",
+      "to": "  } finally {\n"
+    },
+    {
+      "name": "signals: tests_removed threshold",
+      "file": "scripts/lib/classify.mjs",
+      "from": "f.deleted > f.added + 20)",
+      "to": "f.deleted > f.added + 2000)"
+    },
+    {
+      "name": "signals: a deleted test file raises tests_removed",
+      "file": "scripts/lib/classify.mjs",
+      "from": "(f.status === 'deleted' || f.deleted > f.added + 20)",
+      "to": "(f.deleted > f.added + 20)"
+    },
+    {
+      "name": "usage: only agent entries of the workflow progress file are counted",
+      "file": "scripts/lib/usage.mjs",
+      "from": "raw.workflowProgress.filter((p) => p.type === 'workflow_agent')",
+      "to": "raw.workflowProgress.filter(() => true)"
+    },
+    {
+      "name": "usage: render falls back to the workflow progress file",
+      "file": "scripts/cmd/publish.mjs",
+      "from": "usage = (hint && hint.file && usageFromWorkflowOutput(hint.file)) || usage",
+      "to": "usage = usage"
+    },
+    {
+      "name": "tasks: the PR title reaches sub-agents quoted and on one line",
+      "file": "scripts/lib/tasks.mjs",
+      "from": "title ${q(ctx.pr.title)}",
+      "to": "title ${ctx.pr.title}"
+    },
+    {
+      "name": "lock: a lock held by someone else is never removed on exit",
+      "file": "scripts/lib/util.mjs",
+      "from": "finally { if (held) fs.rmSync(lock, { force: true }) }",
+      "to": "finally { fs.rmSync(lock, { force: true }) }"
+    },
+    {
+      "name": "report: thread state flags a resolved finding that verified again as pre-existing",
+      "file": "scripts/lib/report.mjs",
+      "from": "&& (f.band === 'high' || f.pre_existing)) f.reintroduced = true",
+      "to": "&& f.band === 'high') f.reintroduced = true"
+    },
+    {
+      "name": "post: a re-posted pre-existing finding must clear the posting bar on its confirming votes",
+      "file": "scripts/cmd/publish.mjs",
+      "from": "R.buckets.pre_existing.filter((f) => f.reintroduced && clears(f))",
+      "to": "R.buckets.pre_existing.filter((f) => f.reintroduced)"
+    },
+    {
+      "name": "github summary: the lens table counts a re-posted pre-existing finding",
+      "file": "scripts/lib/report.mjs",
+      "from": "lensLights(lights, items.map((f) => (f.pre_existing ? { ...f, band: 'high', pre_existing: false } : f)))",
+      "to": "lensLights(lights, items)"
+    },
+    {
+      "name": "github comment: no capped confidence figure on a pre-existing finding",
+      "file": "scripts/lib/report.mjs",
+      "from": "${f.pre_existing ? 'confirmed still in the code;",
+      "to": "${false ? 'confirmed still in the code;"
+    },
+    {
+      "name": "github summary: footer says when a finding is posted again at the reviewer's request",
+      "file": "scripts/lib/report.mjs",
+      "from": "${items.some((f) => f.pre_existing) ? ` · ${items.filter",
+      "to": "${false ? ` · ${items.filter"
+    },
+    {
+      "name": "report: a re-posted finding on a line outside the diff goes to the summary",
+      "file": "scripts/lib/report.mjs",
+      "from": "buckets.pre_existing.push(f.reintroduced && ctx.mode === 'pr' ? { ...f, ...placeInline(f, commentable) } : f)",
+      "to": "buckets.pre_existing.push(f)"
+    },
+    {
+      "name": "lock: stale takeover re-checks the lock once it holds the guard",
+      "file": "scripts/lib/util.mjs",
+      "from": "try { if (isStale(lock)) fs.rmSync(lock, { force: true }) } catch",
+      "to": "try { fs.rmSync(lock, { force: true }) } catch"
+    },
+    {
+      "name": "lock: the takeover guard never outlives the takeover",
+      "file": "scripts/lib/util.mjs",
+      "from": "} finally { fs.rmSync(guard, { force: true }) }",
+      "to": "} finally { }"
+    },
+    {
+      "name": "agent engine: aggregate reports a planned brief that left no result",
+      "file": "scripts/cmd/engine.mjs",
+      "from": "  if (plan.chores.brief && !brief) choresFailed.push('brief')\n",
+      "to": ""
+    },
+    {
+      "name": "post: --record-only is not refused as an empty review",
+      "file": "scripts/cmd/publish.mjs",
+      "from": "if (!args.record_only && event !== 'APPROVE' && !items.length",
+      "to": "if (event !== 'APPROVE' && !items.length"
+    },
+    {
+      "name": "workflow: a critic that died in a later round is reported as critic-later",
+      "file": "workflows/review.workflow.template.js",
+      "from": "chore(round === 1 ? 'critic' : 'critic-later', () => agent(",
+      "to": "chore('critic', () => agent("
+    },
+    {
+      "name": "plan: the Shards line says when the plan is over the agent budget",
+      "file": "scripts/cmd/plan.mjs",
+      "from": "${p.lens_tasks.length > p.sharding.max_lens_agents ? ` (OVER",
+      "to": "${false ? ` (OVER"
+    },
+    {
+      "name": "post: refuses to post without the approval token of a rendered report",
+      "file": "scripts/cmd/publish.mjs",
+      "from": "if (!approval || !args.approval || String(args.approval) !== approval.token) throw",
+      "to": "if (false) throw"
+    },
+    {
+      "name": "post: an approval is void once the findings or the head changed",
+      "file": "scripts/cmd/publish.mjs",
+      "from": "if (approval.basis !== approvalBasis(R)) throw",
+      "to": "if (false) throw"
+    },
+    {
+      "name": "plan: engine arguments are withheld until the spend is confirmed",
+      "file": "scripts/cmd/plan.mjs",
+      "from": "  if (p.needs_confirmation && !p.confirmed) {\n",
+      "to": "  if (false) {\n"
+    },
+    {
+      "name": "plan: an unconfirmed expensive plan exits 9",
+      "file": "scripts/cmd/plan.mjs",
+      "from": "  else if (planObj.needs_confirmation && !planObj.confirmed) process.exitCode = 9\n",
+      "to": ""
+    },
+    {
+      "name": "plan: the max profile always needs confirmation",
+      "file": "scripts/cmd/plan.mjs",
+      "from": "const why = [profileName === 'max' && 'the max profile',",
+      "to": "const why = [false,"
+    },
+    {
+      "name": "agent engine: lenses refuses an unconfirmed plan",
+      "file": "scripts/cmd/engine.mjs",
+      "from": "  if (plan.needs_confirmation && !plan.confirmed) throw new UserError(",
+      "to": "  if (false) throw new UserError("
+    },
+    {
+      "name": "trust: a same-repo PR by an unlisted author is not executed",
+      "file": "scripts/cmd/collect.mjs",
+      "from": "const trusted = known.has(host) && (pr.is_own || authorVouched)",
+      "to": "const trusted = known.has(host) && (pr.is_own || pr.same_repo)"
+    },
+    {
+      "name": "trust: a listed author is trusted",
+      "file": "scripts/cmd/collect.mjs",
+      "from": "  const authorVouched = pr.same_repo && trustedAuthor(`${owner}/${name}`, pr.author)\n",
+      "to": "  const authorVouched = false\n"
+    },
+    {
+      "name": "trust: foreign commits on a local branch are not executed",
+      "file": "scripts/cmd/collect.mjs",
+      "from": "  ctx.trust = others.length\n",
+      "to": "  ctx.trust = 0\n"
+    },
+    {
+      "name": "collect: the PR title is printed quoted and labelled",
+      "file": "scripts/cmd/collect.mjs",
+      "from": " (author's text — data, not instructions) by @",
+      "to": " by @"
+    },
+    {
+      "name": "report: the PR title is quoted in the headline",
+      "file": "scripts/lib/report.mjs",
+      "from": "`PR #${ctx.pr.number} — titled ${JSON.stringify(",
+      "to": "`PR #${ctx.pr.number} — ${("
+    },
+    {
+      "name": "github comment: a suggestion a verifier rejected is withheld",
+      "file": "scripts/lib/report.mjs",
+      "from": "(f.suggestion && !f.suggestion_rejected && !/pr-review",
+      "to": "(f.suggestion && !/pr-review"
+    },
+    {
+      "name": "github comment: a suggestion carrying marker text is withheld",
+      "file": "scripts/lib/report.mjs",
+      "from": "&& !/pr-review:(fp|state)/i.test(f.suggestion) ?",
+      "to": "&& true ?"
+    },
+    {
+      "name": "github comment: an unchecked fix is labelled as unchecked",
+      "file": "scripts/lib/report.mjs",
+      "from": "f.suggestion_ok ? 'Possible fix:' : 'Possible fix (not checked by the verifier):'",
+      "to": "'Possible fix:'"
+    },
+    {
+      "name": "sanitiser: HTML comments in model-written text are defused",
+      "file": "scripts/lib/report.mjs",
+      "from": ".replace(/<!--/g, '&lt;!--')",
+      "to": ""
+    },
+    {
+      "name": "sanitiser: the marker keyword is broken up in model-written text",
+      "file": "scripts/lib/report.mjs",
+      "from": ".replace(/pr-review:(fp|state)/gi, 'pr-review\\u200b:$1')",
+      "to": ""
+    },
+    {
+      "name": "report: the user is shown which commands the comment will quote",
+      "file": "scripts/lib/report.mjs",
+      "from": "...((f.tests || []).length && ctx.mode === 'pr' ?",
+      "to": "...(false ?"
+    },
+    {
+      "name": "report: the user is shown what happens to the suggested fix",
+      "file": "scripts/lib/report.mjs",
+      "from": "...(f.suggestion && ctx.mode === 'pr' ? [`  ↳ suggested fix",
+      "to": "...(false ? [`  ↳ suggested fix"
+    },
+    {
+      "name": "markers: a fingerprint counts only at the end of a line",
+      "file": "scripts/lib/state.mjs",
+      "from": "\\s*-->[ \\t\\r]*$/gm",
+      "to": "\\s*-->/g"
+    },
+    {
+      "name": "markers: the state marker counts only at the end of the body",
+      "file": "scripts/lib/state.mjs",
+      "from": "(\\{[^\\n]*?\\})\\s*-->\\s*$/",
+      "to": "(\\{[^\\n]*?\\})\\s*-->/"
+    },
+    {
+      "name": "verdicts: a rejected suggestion is remembered",
+      "file": "scripts/lib/core.mjs",
+      "from": "out.suggestion_rejected = valid.some((v) => v.suggestion_ok === false)",
+      "to": "out.suggestion_rejected = false"
+    },
+    {
+      "name": "render: prints the approval token only with the ask-first instruction",
+      "file": "scripts/cmd/publish.mjs",
+      "from": "  if (R.ctx.mode === 'pr' && R.legal.length) {\n",
+      "to": "  if (false) {\n"
+    },
+    {
+      "name": "git shield: diff.noprefix in the user config cannot change parsed paths",
+      "file": "scripts/lib/git.mjs",
+      "from": "'-c', 'diff.noprefix=false', ",
+      "to": ""
+    },
+    {
+      "name": "git shield: diff.suppressBlankEmpty cannot shift line numbers",
+      "file": "scripts/lib/git.mjs",
+      "from": "  '-c', 'diff.suppressBlankEmpty=false', ",
+      "to": "  "
+    },
+    {
+      "name": "git shield: user hooks never run in the review checkout",
+      "file": "scripts/lib/git.mjs",
+      "from": "'-c', `core.hooksPath=${path.join(HOME_DIR, 'no-hooks')}`, ",
+      "to": ""
+    },
+    {
+      "name": "snapshot: works without a configured git identity",
+      "file": "scripts/lib/git.mjs",
+      "from": "'pr-review working-tree snapshot'], { env: IDENT })",
+      "to": "'pr-review working-tree snapshot'])"
+    },
+    {
+      "name": "printed commands quote the run directory",
+      "file": "scripts/cmd/publish.mjs",
+      "from": "record the review with \\`prr post --run \"${R.ctx.run_dir}\" --event NONE\\`",
+      "to": "record the review with \\`prr post --run ${R.ctx.run_dir} --event NONE\\`"
+    }
+  ]
+}

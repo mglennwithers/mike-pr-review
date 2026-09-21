@@ -1,0 +1,7 @@
+# OS and editor noise
+.DS_Store
+Thumbs.db
+*.swp
+
+# never commit a dependency tree: the skill has no dependencies
+node_modules/

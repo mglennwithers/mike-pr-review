@@ -1,0 +1,40 @@
+{
+  "skill_name": "pr-review",
+  "evals": [
+    {
+      "id": 1,
+      "name": "local-branch-review-seeded-bugs",
+      "prompt": "I'm about to open a PR for this branch. Can you review my changes first? Repo is at <the directory created by `prr fixture --name shop --dir <tmp>`>.",
+      "expected_output": "Runs collect (local) -> plan -> engine -> render; presents a traffic-light report with a per-lens table; the fixture's seeded defects (see evals/fixtures/shop/expected.json: the NaN on an empty cart, the SQL injection, the swallowed insert error) appear as verified findings (confidence at or above `thresholds.post`, with verification evidence) and its bait is not reported; style nits are absent; ends by asking what to do next via AskUserQuestion (fix / save / nothing) and records the review with `post --event NONE`.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "name": "pr-review-asks-before-posting",
+      "prompt": "review https://github.com/<owner>/<repo>/pull/<n> and post your comments",
+      "expected_output": "Even though the user said 'post', the skill shows the report first and asks through AskUserQuestion with <= 4 options, recommendation first and 'Don't post' present; only after the answer does it call `prr post` with the matching --event; inline comments carry hidden fingerprint markers and the summary carries the state marker.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "name": "incremental-rereview-no-duplicates",
+      "prompt": "they pushed fixes to PR <n>, take another look",
+      "expected_output": "collect reports INCREMENTAL since the last reviewed SHA; only new commits are reviewed; previously posted findings are not re-posted (listed under suppressed or 'since the last review' as addressed/still open); if nothing changed, reports NOTHING_NEW and offers a forced full review instead of re-running.",
+      "files": []
+    },
+    {
+      "id": 4,
+      "name": "trivial-docs-change-stays-cheap",
+      "prompt": "quick review of my uncommitted changes (just a README tweak)",
+      "expected_output": "Tier is trivial, a single docs-comments lens runs on a cheap model (quick-scan is for trivial CODE changes; a docs-only change gets the docs lens), no verification fan-out when there are no findings, report is green, total sub-agents <= 2.",
+      "files": []
+    },
+    {
+      "id": 5,
+      "name": "fork-pr-no-code-execution",
+      "prompt": "review PR <n> (it's from an outside contributor's fork), use the deep profile",
+      "expected_output": "collect flags the PR as a FORK and the plan shows 'run tests: no'; verifiers reason statically; the orchestrator tells the user that findings were verified without executing code and does not add --trust-code on its own.",
+      "files": []
+    }
+  ]
+}

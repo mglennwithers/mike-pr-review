@@ -1,0 +1,141 @@
+{
+  "_doc": "Answer key for the 'ledger' benchmark fixture. `base/` is committed on main; `change/` is overlaid and committed on a feature branch. `prr score` counts a seeded bug as FOUND when a verified (postable) finding sits in the same file within `tolerance` lines of the range AND its title+body matches `match` (case-insensitive regex). A verified finding on a bait is a false positive. Verified findings that match nothing are listed as 'extra' for a human to judge (they may be legitimate). Line numbers are in the NEW version of each file. Note: the change makes exactly one pre-existing test fail (tests/test_transfers.py::test_transfer_into_a_frozen_account_is_rejected) — that is the `frozen-destination-guard` defect, not a broken fixture.",
+  "name": "ledger",
+  "description": "Small Python payments service (sqlite, stdlib only): one feature branch adding scheduled/batch transfers, per-role limits, CSV statements and admin refunds, with 8 seeded defects across 6 lenses and 2 baits that only look like bugs.",
+  "branch": "feature/batch-transfers",
+  "commit_message": "Add scheduled and batch transfers, per-role limits, CSV statement export and admin refunds",
+  "tolerance": 3,
+  "expected": [
+    {
+      "id": "refund-role-from-body",
+      "kind": "bug",
+      "severity": "red",
+      "lens": "security",
+      "path": "ledger/api.py",
+      "lines": [
+        180,
+        186
+      ],
+      "match": "actor_role|authoriz|authoris|privileg|escalat|admin|role|body|request|forge|spoof",
+      "note": "create_refund builds an audit record whose `actor_role` falls back to `principal.role` but prefers `body.get(\"actor_role\")`, then authorises the refund against that value. The README states the role comes from the token record and that request bodies never carry authorisation data. Demonstrate: POST /refunds with a clerk token and {\"transfer_id\": N, \"actor_role\": \"admin\"} returns 201; the same request without actor_role returns 403. refunds.refund_transfer does no role check of its own (auth lives in the handlers, as in base), so this is the only gate."
+    },
+    {
+      "id": "statement-category-sql-injection",
+      "kind": "bug",
+      "severity": "red",
+      "lens": "security",
+      "path": "ledger/statements.py",
+      "lines": [
+        41,
+        44
+      ],
+      "match": "inject|interpolat|parameteri|parametris|placeholder|escap|sanitiz|format|concat|untrusted",
+      "note": "statement_rows parameterises every value except `category`, which is spliced in with `\"category = '%s'\" % category` and comes straight from the statement request's query string (api.account_statement passes query.get('category')). All base SQL is parameterised. Demonstrate: statements.statement_rows(conn, acct, start, end, category=\"general' OR '1'='1\") returns rows of every category."
+    },
+    {
+      "id": "refund-fee-float-truncation",
+      "kind": "bug",
+      "severity": "red",
+      "lens": "correctness",
+      "path": "ledger/refunds.py",
+      "lines": [
+        45,
+        48
+      ],
+      "match": "float|round|truncat|pro.?rata|half.?up|int\\(|cent|penny|integer|money\\.",
+      "note": "refundable_fee_cents divides in float and truncates with int(), instead of money.pro_rata_cents which the README mandates (integer arithmetic, rounded half up). Short-changes the refunded party by a cent on any partial refund whose exact share is a half or more, and on float-representation cases even when the exact share is a whole number. Demonstrate: refundable_fee_cents({'amount_cents': 10000, 'fee_cents': 25}, 5000) == 12 but money.pro_rata_cents(25, 5000, 10000) == 13; likewise (22000, 55, 6000) gives 14 instead of 15. The new tests only cover a full refund, where share == 1.0 and the bug is invisible."
+    },
+    {
+      "id": "frozen-destination-guard",
+      "kind": "bug",
+      "severity": "red",
+      "lens": "correctness",
+      "path": "ledger/transfers.py",
+      "lines": [
+        69,
+        72
+      ],
+      "match": "dest|destination|frozen|closed|inactive|active|assert_active|guard|status|regress|removed",
+      "note": "execute_transfer was rewritten to take a fee override and now only calls accounts.assert_active(source); the base version checked both accounts. README: 'Both the source and the destination account must be active.' This makes the pre-existing test tests/test_transfers.py::test_transfer_into_a_frozen_account_is_rejected fail. Demonstrate: freeze the destination, call execute_transfer, and it returns status 'posted' with the frozen account credited. (Tolerance is wide on purpose: the defect is a REMOVED guard, so a correct finding may anchor on the signature, on where the guard used to be, or on the credit a few lines below.)",
+      "tolerance": 12
+    },
+    {
+      "id": "scheduled-failure-reported-executed",
+      "kind": "bug",
+      "severity": "red",
+      "lens": "errors",
+      "path": "ledger/scheduling.py",
+      "lines": [
+        136,
+        144
+      ],
+      "match": "swallow|silent|except|broad|catch|executed|success|failure|logged|mask|hid|retry|lost",
+      "note": "_execute_one wraps execute_transfer in `except Exception`, logs a warning, then falls through to _advance() and returns status 'executed'. A schedule that could not be posted is marked completed (or advanced past its due date), so nothing ever retries and the caller is told it ran. README: 'A schedule that could not be posted has not run: it must not be reported as executed and must not have its next_run_at moved on.' Demonstrate: schedule a transfer out of a zero-balance account, call run_due — results say status 'executed', the schedule status becomes 'completed', and no transfer row exists."
+    },
+    {
+      "id": "batch-reserve-race",
+      "kind": "bug",
+      "severity": "red",
+      "lens": "concurrency",
+      "path": "ledger/batch.py",
+      "lines": [
+        92,
+        109
+      ],
+      "match": "race|atomic|transaction|concurren|check.?then.?act|lost update|interleav|read.?modify.?write|relative|stale|simultan",
+      "note": "_reserve_total SELECTs the balance, checks it in Python, and writes back an absolute `balance_cents = ?` computed from the stale read — with no db.transaction() around the pair. base transfers.execute_transfer does the check and a relative `balance = balance + ?` inside one transaction, and the README says balances are only ever changed relatively inside a transaction. Two batches on the same source both pass the check and the second write loses the first debit. Demonstrate: patch db.query_one so a competing submit_batch runs to completion between the SELECT and the UPDATE; the source ends 10025 cents richer than it should."
+    },
+    {
+      "id": "batch-fanout-test-cannot-fail",
+      "kind": "bug",
+      "severity": "yellow",
+      "lens": "tests",
+      "path": "tests/test_batch.py",
+      "lines": [
+        73,
+        80
+      ],
+      "match": "assert|cannot fail|can.?t fail|never fail|no.{0,15}assert|stub|fake|mock|tautolog|vacuous|itself|production|exercis",
+      "note": "BatchFanOutTests.test_every_leg_is_posted_out_of_the_source_account builds a FakeEngine, calls the fake itself in a loop, and then asserts on what the fake recorded. No production code runs. Demonstrate: replace batch.submit_batch/preview_batch/_post_leg/_reserve_total with functions that raise, run the test case — it still passes."
+    },
+    {
+      "id": "statement-export-n-plus-one",
+      "kind": "bug",
+      "severity": "yellow",
+      "lens": "performance",
+      "path": "ledger/reports.py",
+      "lines": [
+        106,
+        110
+      ],
+      "match": "n\\+1|n \\+ 1|per.?row|inside the loop|in a loop|each row|query|queries|round.?trip|batch|account_names",
+      "note": "statement_export_rows calls account_names(conn, [...]) once per transfer row, so a statement of N transfers issues N account-name queries. recent_activity, directly above in the same file, resolves every name in one batched IN (...) lookup, and the README says exports read what they need in one query. Demonstrate: conn.set_trace_callback over statements.export_statement with 8 transfers records 8 'FROM accounts WHERE id IN' statements."
+    },
+    {
+      "id": "bait-average-leg-empty",
+      "kind": "bait",
+      "path": "ledger/batch.py",
+      "lines": [
+        48,
+        50
+      ],
+      "tolerance": 1,
+      "match_in": "title",
+      "match": "average|mean|zero|division|divide|empty|len\\(|leg",
+      "note": "NOT A BUG. _average_leg_cents divides by len(legs) with no empty check, but it is private and its only caller is preview_batch, which calls _validate_legs first — and _validate_legs raises InvalidBatch('batch must contain at least one leg') on an empty or non-list input. submit_batch validates the same way. Reporting a ZeroDivisionError here is a false positive."
+    },
+    {
+      "id": "bait-daily-limit-inclusive",
+      "kind": "bait",
+      "path": "ledger/limits.py",
+      "lines": [
+        82,
+        84
+      ],
+      "tolerance": 1,
+      "match_in": "title",
+      "match": ">=|off.?by.?one|exclusive|inclusive|boundary|strictly|exactly (at|equal)|equal to the limit|at the limit",
+      "note": "NOT A BUG. `used + amount_cents >= limit` looks like a classic off-by-one, but the README's Limits section states the daily ceiling is exclusive: a transfer is refused when it would bring the day's total 'to or above' the role's limit, so that an operator who has exactly hit the limit is locked out. tests/test_limits.py::test_the_daily_ceiling_is_exclusive pins the boundary (199_999 allowed, 200_000 refused at 300_000 used against a 500_000 limit), and check_batch applies the same rule. Reporting it is a false positive. (The title match is about the COMPARISON only: a finding about the daily-limit check racing with concurrent transfers sits on the same lines and is a real, different defect.)"
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "_doc": "Answer key for the 'shop' benchmark fixture. `base/` is committed on main; `change/` is overlaid and committed on a feature branch. `prr score` counts a seeded bug as FOUND when a verified (postable) finding sits in the same file within `tolerance` lines of the range AND its title+body matches `match` (case-insensitive regex). A verified finding on a bait is a false positive. Verified findings that match nothing are listed as 'extra' for a human to judge (they may be legitimate).",
+  "name": "shop",
+  "description": "Tiny Node order library: one feature commit with 5 seeded defects across 4 lenses and 1 bait that only looks like a bug.",
+  "branch": "feature/order-lookup",
+  "commit_message": "Add order lookup by customer, receipt lines; simplify cart helpers",
+  "tolerance": 3,
+  "expected": [
+    { "id": "nan-empty-cart", "kind": "bug", "severity": "red", "lens": "correctness", "path": "src/cart.js", "lines": [5, 8], "match": "NaN|empty|divi|guard|zero", "note": "Guard `if (!items.length) return 0` removed; averageItemPrice([]) is NaN; existing test fails." },
+    { "id": "coupon-boundary", "kind": "bug", "severity": "red", "lens": "correctness", "path": "src/cart.js", "lines": [12, 12], "match": "minSpend|boundary|>=|exactly|threshold|or more|inclusive", "note": ">= became >; README promises '$50 or more'; existing test fails." },
+    { "id": "swallowed-insert", "kind": "bug", "severity": "red", "lens": "errors", "path": "src/orders.js", "lines": [6, 11], "match": "swallow|catch|ok: ?true|success|insert fail|silent|hid", "note": "catch logs and falls through to return { ok: true }." },
+    { "id": "sql-injection", "kind": "bug", "severity": "red", "lens": "security", "path": "src/orders.js", "lines": [14, 16], "match": "inject|interpolat|parameteri|escap|sanitiz", "note": "customerName interpolated into SQL string." },
+    { "id": "test-cannot-fail", "kind": "bug", "severity": "yellow", "lens": "tests", "path": "test/orders.test.js", "lines": [4, 7], "match": "assert|cannot fail|can't fail|never fail|no check|nothing", "note": "New test has no assertions." },
+    { "id": "bait-null-name", "kind": "bait", "path": "src/cart.js", "lines": [18, 20], "tolerance": 1, "match_in": "title", "match": "name|trim|TypeError|null", "note": "formatLineItem dereferences item.name, but its only caller (receiptLines) filters to items with a string name first. Reporting it is a false positive." }
+  ]
+}

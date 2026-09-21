@@ -1,0 +1,106 @@
+{
+  "_doc": "Budget profiles for pr-review. `prr plan` combines a profile with the change's tier (trivial|small|medium|large|huge) to decide which lenses run, on which model, and how hard findings get verified. `prr plan --profile <name>` picks a profile, PR_REVIEW_PROFILE sets a personal default, `default` names the fallback; `prr profiles` lists them. Models are Claude Code aliases (haiku|sonnet|opus). The file is read on every `prr plan`; edit freely. TUNING: every knob here moves both cost and recall, and run-to-run variance is large. Before lowering lens or verify effort, moving lenses or verifiers to a cheaper model, lowering caps or enabling the verification floor, re-run the fixtures several times per configuration (`prr fixture`, `prr score`) and compare with `prr stats` (references/metrics.md). CONFIRM_ABOVE {cost, agents}: when the plan's estimated spend (USD at API list prices) is above cost, or its estimated number of sub-agents is above agents, `prr plan` exits 9 with a CONFIRM_SPEND line and withholds the engine arguments until it is re-run with --confirmed, after the user has agreed; `prr lenses` refuses an unconfirmed plan the same way. The max profile always asks. Lower the numbers to be asked sooner; deleting a number removes that limit. THRESHOLDS: post/show are confidence bars (is it true?): findings at or above post are offered for posting, those from show up to post are shown but never posted. min_importance (does it matter?) keeps verified should-fix nits out of the postable list - they are shown as minor and can still be posted by id; blockers are never filtered by it. max_inline_yellow caps should-fix INLINE comments per review, most important first; the rest are listed compactly in the summary comment. cheap_verify_below: a should-fix finding its own lens rates below this goes to the verify.yellow_low_stakes verifier. verify_min_importance (0 = off, as shipped) is the verification floor: should-fix findings their own lens rates below it are listed as minor WITHOUT verification and can never be posted. It saves verifier runs and costs recall, because a lens can under-rate a real defect. UNSAFE: a floor above min_importance means findings that would have been postable are never verified - keep verify_min_importance <= min_importance. To switch the floor off set it to 0; deleting the key makes min_importance the floor. `prr plan --verify-floor N` sets it for one run. A profile may override any threshold with its own thresholds object. TIERS: see tiers._doc. LENS_PRIORITY: the order in which lenses keep their place when lens_cap or max_lens_agents trims the list. PER PROFILE - label, when: shown by `prr profiles`. orchestrator: advice printed by plan; the model that actually orchestrates is decided by the skill frontmatter and the session. lens_model: default, by_tier (cheaper models on small changes), overrides per lens (an override wins over by_tier). critical_upgrade {lenses, model, min_tier?}: when the change touches a critical area (auth, crypto, money, migrations, CI, secrets) the named lenses, and the single-pass quick-scan lens, move up to this model, optionally only from min_tier up; it never moves a lens down; null = no upgrade. `prr plan --no-critical-upgrade` switches it off for one run, for comparisons. merge_lenses {target: [sources]}: when two or more of the source lenses would run, one combined lens runs instead (one read of the change instead of several); a lens asked for by name is never folded away. small_change {max_lines}: a small-tier change of at most max_lines effective lines that touches no critical area is reviewed by ONE combined quick-scan pass instead of several focused lenses (no brief); findings are verified as usual. Remove the key to always use focused lenses. lens_cap: per tier, how many automatically woken lenses may run; lenses asked for by name always run. shard_lines, max_lens_agents: each lens is split into shards of about shard_lines effective lines; if that needs more than max_lens_agents agents, shards are made coarser (up to 16x) and then the least important automatically woken lenses are dropped. max_candidates: how many findings may go to verification; the rest are reported as dropped, not hidden. verify: red and yellow are lists of [stance, model] (stances: reproduce, refute, impact) for blocking and should-fix findings; yellow_low_stakes is the verifier for should-fix findings in housekeeping categories (maintainability, docs-comments, conventions, tests, types, hygiene) and for those under cheap_verify_below; tiebreak is the model that settles a blocker the verifiers disagree on (null = none: a contested blocker then stays below the posting bar); run_tests yes|cheap|no says whether verifiers may execute code (plan forces no when the code is not trusted or with --no-tests); by_tier overrides any of these for one tier. verify.escalate: a blocker is first checked by the FIRST stance in verify.red alone, and the remaining stances run only when that verifier could not prove the finding by executing code - so put reproduce first; should-fix findings and single-stance lists are unaffected. chore_model: model for the brief, merge, dedupe and follow-up chores. brief {min_tier}: smallest tier that gets a brief agent. Lenses woken only by a keyword are marked soft; the brief agent may drop them after reading the diff, or add up to two standby lenses - without a brief nobody corrects the keyword heuristics. semantic_dedupe: a chore checks candidates against comments already on the PR and against dismissed findings, when there are any. merge_duplicates {min_candidates}: once a run has at least that many candidates, one chore groups those that share a root cause so they are verified and posted once. followup: on a re-review of a PR, a chore re-checks the findings still open from earlier reviews. critic {enabled, model, max_rounds}: a completeness critic looks for what the lenses missed (never on a trivial change); max_rounds applies to the Workflow engine, the Agent-tool engine runs one round. effort {lens, verify, chore}: reasoning effort for Workflow-engine sub-agents (low|medium|high); a stage left out inherits the session's. `chore` applies to the brief, merge and dedupe agents; the follow-up, critic and tiebreak agents always run at the session's effort. As shipped only chores are turned down; measure on the fixtures (several runs) before lowering lens or verify effort.",
+  "default": "standard",
+  "confirm_above": { "cost": 15, "agents": 40 },
+  "thresholds": { "post": 80, "show": 50, "min_importance": 30, "verify_min_importance": 0, "cheap_verify_below": 40, "max_inline_yellow": 6 },
+  "tiers": {
+    "_doc": "Upper bounds on effective changed lines (generated/lock files count 0, tests 0.5, docs 0.25). risk_bump: total risk points at which the tier is raised one step.",
+    "trivial": { "max_lines": 25, "max_files": 3 },
+    "small": { "max_lines": 150 },
+    "medium": { "max_lines": 600 },
+    "large": { "max_lines": 2000 },
+    "huge": {},
+    "risk_bump": 4
+  },
+  "lens_priority": ["correctness", "security", "errors", "data-migrations", "concurrency", "api-compat", "tests", "dependencies", "infra-config", "performance", "hygiene", "conventions", "types", "maintainability", "docs-comments"],
+  "profiles": {
+    "lean": {
+      "label": "Lean — cheapest useful review",
+      "when": "Drafts, WIP pushes, personal projects, or a quick pre-commit sanity pass.",
+      "orchestrator": "sonnet",
+      "lens_model": { "default": "sonnet", "by_tier": { "trivial": "haiku", "small": "haiku" }, "overrides": { "docs-comments": "haiku", "dependencies": "haiku", "conventions": "haiku", "infra-config": "haiku" } },
+      "critical_upgrade": { "lenses": ["security", "correctness"], "model": "sonnet" },
+      "merge_lenses": { "hygiene": ["maintainability", "types", "docs-comments", "conventions"] },
+      "effort": { "chore": "low" },
+      "small_change": { "max_lines": 100 },
+      "lens_cap": { "trivial": 1, "small": 2, "medium": 3, "large": 4, "huge": 5 },
+      "max_lens_agents": 6,
+      "shard_lines": 900,
+      "max_candidates": 12,
+      "verify": {
+        "red": [["refute", "sonnet"]], "yellow": [["refute", "haiku"]], "tiebreak": null, "run_tests": "cheap",
+        "by_tier": { "large": { "yellow": [["refute", "sonnet"]] }, "huge": { "yellow": [["refute", "sonnet"]] } }
+      },
+      "chore_model": "haiku",
+      "brief": { "min_tier": "medium" },
+      "semantic_dedupe": true,
+      "merge_duplicates": { "min_candidates": 8 },
+      "followup": true,
+      "critic": { "enabled": false }
+    },
+    "standard": {
+      "label": "Standard — Opus orchestrates, Sonnet reviews and verifies, Haiku does the chores and checks housekeeping findings",
+      "when": "The default for day-to-day PRs.",
+      "orchestrator": "opus",
+      "lens_model": { "default": "sonnet", "by_tier": { "trivial": "haiku" }, "overrides": { "docs-comments": "haiku", "dependencies": "haiku" } },
+      "critical_upgrade": null,
+      "merge_lenses": { "hygiene": ["maintainability", "types", "docs-comments", "conventions"] },
+      "effort": { "chore": "low" },
+      "small_change": { "max_lines": 100 },
+      "lens_cap": { "trivial": 1, "small": 3, "medium": 6, "large": 10, "huge": 14 },
+      "max_lens_agents": 16,
+      "shard_lines": 600,
+      "max_candidates": 30,
+      "verify": {
+        "red": [["reproduce", "sonnet"], ["refute", "sonnet"]], "yellow": [["refute", "sonnet"]], "yellow_low_stakes": [["refute", "haiku"]], "tiebreak": "opus", "run_tests": "yes", "escalate": true,
+        "by_tier": {
+          "trivial": { "red": [["refute", "sonnet"]], "yellow": [["refute", "haiku"]] },
+          "large": { "red": [["reproduce", "sonnet"], ["refute", "sonnet"], ["impact", "sonnet"]] },
+          "huge": { "red": [["reproduce", "sonnet"], ["refute", "sonnet"], ["impact", "sonnet"]] }
+        }
+      },
+      "chore_model": "haiku",
+      "brief": { "min_tier": "small" },
+      "semantic_dedupe": true,
+      "merge_duplicates": { "min_candidates": 5 },
+      "followup": true,
+      "critic": { "enabled": false }
+    },
+    "deep": {
+      "label": "Deep — every applicable lens, three-way verification, completeness critic",
+      "when": "Risky or high-blast-radius changes: auth, payments, migrations, public APIs, release branches.",
+      "orchestrator": "opus",
+      "lens_model": { "default": "sonnet", "by_tier": {}, "overrides": { "docs-comments": "haiku" } },
+      "critical_upgrade": { "lenses": ["security", "correctness", "concurrency", "data-migrations"], "model": "opus" },
+      "lens_cap": { "trivial": 2, "small": 5, "medium": 10, "large": 14, "huge": 14 },
+      "max_lens_agents": 32,
+      "shard_lines": 450,
+      "max_candidates": 50,
+      "verify": { "red": [["reproduce", "sonnet"], ["refute", "sonnet"], ["impact", "opus"]], "yellow": [["refute", "sonnet"], ["reproduce", "sonnet"]], "tiebreak": "opus", "run_tests": "yes", "escalate": true },
+      "chore_model": "haiku",
+      "brief": { "min_tier": "trivial" },
+      "semantic_dedupe": true,
+      "merge_duplicates": { "min_candidates": 5 },
+      "followup": true,
+      "critic": { "enabled": true, "model": "sonnet", "max_rounds": 1 }
+    },
+    "max": {
+      "label": "Max — Opus on the core lenses and every verification",
+      "when": "Release gates, security-sensitive code, or when a miss is far more expensive than the review.",
+      "orchestrator": "opus",
+      "lens_model": { "default": "sonnet", "by_tier": {}, "overrides": { "correctness": "opus", "security": "opus", "concurrency": "opus", "data-migrations": "opus", "api-compat": "opus", "docs-comments": "haiku" } },
+      "critical_upgrade": { "lenses": ["errors", "performance", "infra-config"], "model": "opus" },
+      "lens_cap": { "trivial": 3, "small": 8, "medium": 14, "large": 14, "huge": 14 },
+      "max_lens_agents": 48,
+      "shard_lines": 350,
+      "max_candidates": 80,
+      "verify": { "red": [["refute", "opus"], ["reproduce", "opus"], ["impact", "opus"]], "yellow": [["refute", "sonnet"], ["reproduce", "opus"]], "tiebreak": "opus", "run_tests": "yes", "escalate": false },
+      "chore_model": "haiku",
+      "brief": { "min_tier": "trivial" },
+      "semantic_dedupe": true,
+      "merge_duplicates": { "min_candidates": 5 },
+      "followup": true,
+      "critic": { "enabled": true, "model": "opus", "max_rounds": 2 }
+    }
+  }
+}
