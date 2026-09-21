@@ -407,6 +407,8 @@ export default async function selftest(argv = []) {
     const again = events().filter((e) => e.type === 'run' && e.run_id === runEv.run_id).pop()
     assert.equal(again.funnel.verified, 2); assert.equal(again.decisions.dismissed, 1); assert.equal(again.lens_stats.security.verified, 1)
     assert.ok(again.usage.by_stage_model['lens|sonnet'].units >= 1, 'size units are logged so the estimate can calibrate per unit')
+    assert.ok(again.usage.by_stage.lens.calls >= 1, 'API calls are logged per stage: an agent pays for its whole context on every one, so calls explain the bill')
+    assert.match(prr('stats').stdout, /Calls each/)
     // a damaged or foreign line in the log must never stop a review step
     fs.appendFileSync(path.join(home, 'metrics', 'events.jsonl'), '[1,2]\n{"v":2,"type":"run"}\n{"v":1,"type":"run","usage":{"source":"transcripts","by_stage_model":{"lens|sonnet":null}}}\nnot json\n')
     assert.equal(prr('plan', '--run', runDir).code, 0, 'plan must survive a damaged metrics log')
@@ -703,6 +705,12 @@ async function prModeOffline({ tmp, repo, git, prr, ok, home }) {
   assert.equal(r.code, 0, r.stderr + r.stdout); assert.match(r.stdout, /Code execution: allowed/); assert.match(r.stdout, /@alice is on your trusted-authors list/)
   assert.equal(prr('plan', '--run', dir).code, 0)
   const verifyCommon = (d) => fs.readFileSync(path.join(d, 'tasks', 'verify-common.md'), 'utf8')
+  // every API call re-reads the whole context, so the task files must tell agents to fetch what they can in one message
+  for (const n of fs.readdirSync(path.join(dir, 'tasks')).filter((x) => /^lens-/.test(x))) {
+    const text = fs.readFileSync(path.join(dir, 'tasks', n), 'utf8')
+    assert.match(text, /ONE message/, n + ': the opening reads must be asked for in a single message')
+    assert.doesNotMatch(text, /Read first, in this order/, 'a numbered order reads as one file per turn')
+  }
   assert.match(verifyCommon(dir), /You may run code/); assert.doesNotMatch(verifyCommon(dir), /Do not execute any code/)
   results(dir, [finding(pct)])
   r = prr('render', '--run', dir); assert.match(r.stdout, /LEGAL_EVENTS=APPROVE,COMMENT,REQUEST_CHANGES/)

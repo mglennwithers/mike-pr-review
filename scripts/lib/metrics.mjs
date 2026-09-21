@@ -54,7 +54,9 @@ const slimUsage = (u, plan, ctx) => {
     const k = `${a.stage}|${a.alias}`
     units[k] = (units[k] || 0) + (a.stage === 'lens' ? lensSizeFactor(shardEff.get(a.shard) ?? totalEff) : stageKind(a.stage) === 'verify' ? verifySizeFactor(totalEff) : 1)
   }
-  const slim = (g) => Object.fromEntries(Object.entries(g).map(([k, v]) => [k, { agents: v.agents, tokens: v.total, cost: v.cost }]))
+  // api_calls travels with the rest: an agent pays for its whole accumulated context on EVERY call, so calls per agent
+  // is the number that explains a bill, and nothing reported it before.
+  const slim = (g) => Object.fromEntries(Object.entries(g).map(([k, v]) => [k, { agents: v.agents, calls: v.api_calls, tokens: v.total, cost: v.cost }]))
   const t = u.totals
   return { source: 'transcripts', agents: t.agents, tokens: t.tokens, fresh_input: t.input + t.cache_write_5m + t.cache_write_1h, cache_read: t.cache_read, output: t.output, cost: t.cost,
     wall_ms: t.agent_wall_ms, unpriced_tokens: t.unpriced_tokens || 0, orchestrator: u.orchestrator ? { tokens: u.orchestrator.total, cost: u.orchestrator.cost, turns: u.orchestrator.turns } : null,

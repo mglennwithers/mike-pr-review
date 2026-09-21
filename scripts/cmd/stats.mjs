@@ -39,7 +39,7 @@ export function aggregate(events, f = {}) {
   const grid = Object.values(cells).sort((a, b) => a.profile.localeCompare(b.profile) || TIERS.indexOf(a.tier) - TIERS.indexOf(b.tier))
     .map((c) => ({ profile: c.profile, tier: c.tier, runs: c.runs, avg_agents: avg(c.agents), avg_tokens: avg(c.tokens), avg_cost: avg(c.cost), median_cost: median(c.cost), avg_orchestrator_cost: avg(c.orch), avg_minutes: avg(c.minutes), avg_verified: avg(c.verified) }))
 
-  const sumGroup = (field) => { const g = {}; for (const r of measured) for (const [k, v] of Object.entries(r.usage[field] || {})) { const x = (g[k] ||= { agents: 0, tokens: 0, cost: 0 }); x.agents += v.agents; x.tokens += v.tokens; x.cost += v.cost || 0 } return g }
+  const sumGroup = (field) => { const g = {}; for (const r of measured) for (const [k, v] of Object.entries(r.usage[field] || {})) { const x = (g[k] ||= { agents: 0, calls: 0, call_agents: 0, call_cost: 0, tokens: 0, cost: 0 }); if (typeof v.calls === 'number') { x.calls += v.calls; x.call_agents += v.agents || 0; x.call_cost += v.cost || 0 } x.agents += v.agents; x.tokens += v.tokens; x.cost += v.cost || 0 } return g }
   const stage = sumGroup('by_stage'), model = sumGroup('by_model'), lensSpend = sumGroup('by_lens')
   const subCost = measured.reduce((s, r) => s + r.usage.cost, 0)
   const orchCost = measured.reduce((s, r) => s + ((r.usage.orchestrator && r.usage.orchestrator.cost) || 0), 0)
@@ -139,8 +139,8 @@ export default function stats(argv) {
     for (const g of A.grid) row(g.profile, g.tier, g.runs, n1(g.avg_agents), fmtTokens(g.avg_tokens && Math.round(g.avg_tokens)), `${fmtCost(g.avg_cost)} / ${fmtCost(g.median_cost)}`, fmtCost(g.avg_orchestrator_cost), n1(g.avg_minutes), n1(g.avg_verified))
   }
   if (Object.keys(A.stage).length) {
-    L.push('', '## Where the spend goes', '', '| Stage | Agents | Tokens | Cost | Share |', '|---|---|---|---|---|')
-    for (const [k, v] of Object.entries(A.stage).sort((a, b) => b[1].cost - a[1].cost)) row(k, v.agents, fmtTokens(v.tokens), fmtCost(v.cost), pct(v.cost, A.spend.sub_agents))
+    L.push('', '## Where the spend goes', '', `An agent re-reads everything it has loaded on EVERY API call, so calls per agent, not agents, is what a long review costs. Call counts were only recorded from 0.2.0: where they show \u2014, the runs in scope predate them, and the two call columns average only the runs that carry them.`, '', '| Stage | Agents | Calls each | Tokens | Cost | Per call | Share |', '|---|---|---|---|---|---|---|')
+    for (const [k, v] of Object.entries(A.stage).sort((a, b) => b[1].cost - a[1].cost)) row(k, v.agents, v.call_agents ? (v.calls / v.call_agents).toFixed(1) : '—', fmtTokens(v.tokens), fmtCost(v.cost), v.call_agents ? fmtCost(v.call_cost / v.calls) : '—', pct(v.cost, A.spend.sub_agents))
     L.push('', '| Model | Agents | Tokens | Cost | Share |', '|---|---|---|---|---|')
     for (const [k, v] of Object.entries(A.model).sort((a, b) => b[1].cost - a[1].cost)) row(k, v.agents, fmtTokens(v.tokens), fmtCost(v.cost), pct(v.cost, A.spend.sub_agents))
   }

@@ -570,6 +570,18 @@
       "file": "scripts/cmd/reply.mjs",
       "from": "if (already && !args.force) throw new UserError",
       "to": "if (false) throw new UserError"
+    },
+    {
+      "name": "tasks: lens agents are told to batch their opening reads",
+      "file": "scripts/lib/tasks.mjs",
+      "from": "## Read first — all four in ONE message",
+      "to": "## Read first, in this order"
+    },
+    {
+      "name": "usage: the API-call count reaches the run record",
+      "file": "scripts/lib/metrics.mjs",
+      "from": "agents: v.agents, calls: v.api_calls",
+      "to": "agents: v.agents"
     }
   ]
 }

@@ -17,6 +17,15 @@ How to read the numbers:
 `prr plan` prints an **Estimated spend** line before anything runs. Agent counts are exact for lenses and chores and a guess for verification (it depends on how many findings the lenses raise). Each agent is priced as *cost per size unit × size factor*:
 - The **per-unit cost** of a kind of agent (stage × model) is the user's own logged average once the log holds three or more agents of that kind; until then it is a built-in rough starting value (a dollar figure fixed in `scripts/lib/metrics.mjs`; it does not follow edits to `pricing.json`). The line says which of the two is in use. Only this part recalibrates.
 - The **size factors** are fixed formulas, not learned: a lens agent counts `1 + <effective lines in its shard> / 1100` units, a verifier `1 + <effective lines in the whole change> / 5000` units (at most 3).
+- **What a long review actually costs is API calls, not agents.** Every call re-sends the agent's whole accumulated
+  context, so a lens agent that makes 15 calls pays for its shard fifteen times over. Measured: on a small change agents
+  make 6-8 calls each; on a 4,900-line change lens agents made 15.5 and verifiers 18.4, and cache reads were 92% of all
+  tokens. `prr stats` reports calls per agent and cost per call for runs recorded from 0.2.0 onwards.
+- The task files ask agents to fetch what they can in one message (the opening reads, then a shard's patches), because
+  four sequential reads cost four full context re-sends. Measured on the `shop` fixture this changed nothing outside
+  run-to-run noise (6.9 to 6.7 calls per agent, recall 5/5 either way, cost varying 17% in the other direction on output
+  alone) — that fixture is 24 lines, where the problem does not arise. Whether it helps on a large sharded change is
+  **untested**: one such run costs about $25, so measure it the next time you review something big, not on purpose.
 - Orchestrator turns are not included. Once three measured reviews are logged, the plan adds a line with the median orchestrator cost of the most recent ones (up to ten).
 
 Treat the estimate as an order of magnitude and quote the line when telling the user what will run. It is also what the spend gate compares with `confirm_above` in `profiles.json` (`CONFIRM_SPEND`, exit 9).
