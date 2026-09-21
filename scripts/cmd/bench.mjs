@@ -42,6 +42,7 @@ export function fixture(argv) {
 }
 
 export function score(argv) {
+  // (Same guard as `render`: a run that was planned but never put through the engine has nothing to score.)
   const args = parseArgs(argv)
   const runDir = requireRun(args)
   const R = prepare(runDir)

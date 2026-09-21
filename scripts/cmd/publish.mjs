@@ -1,5 +1,6 @@
 // prr render / post — show the traffic-light report, then (only after the user has chosen) post and record.
 import crypto from 'node:crypto'
+import fs from 'node:fs'
 import path from 'node:path'
 import { UserError, parseArgs, readJson, requireRun, truncate, writeJson, writeText } from '../lib/util.mjs'
 import { applyInlineCap, githubComment, githubSummary, prepare, setScrub, terminalReport } from '../lib/report.mjs'
@@ -26,6 +27,7 @@ export async function render(argv) {
   const runDir = requireRun(args)
   // `render --from <workflow output file>` ingests first: one orchestrator turn instead of two.
   if (args.from) (await import('./engine.mjs')).ingest(['--run', runDir, '--from', String(args.from)])
+  if (!fs.existsSync(path.join(runDir, 'results.json'))) throw new UserError(`No results for this run yet: the review engine has not been run, or its output was never ingested.\nNEXT: run the engine (SKILL.md step 4), then \`prr render --run "${runDir.split(path.sep).join('/')}" --from <the engine's output file>\`.`, { code: 2 })
   const R = prepare(runDir)
   const report = terminalReport(R) + '\n' + usageLine(measure(runDir, R.ctx))
   writeText(path.join(runDir, 'report.md'), report + '\n')

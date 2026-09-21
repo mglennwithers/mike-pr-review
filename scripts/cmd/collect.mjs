@@ -280,10 +280,11 @@ function collectLocal(ctx, scope, args, cwd, runDir) {
   const origin = G.originInfo(root)
   ctx.repo = { host: origin ? origin.host : null, owner: origin ? origin.owner : null, name: origin ? origin.repo : path.basename(root), root: fwd(root) }
   ctx.transport = { kind: 'none', can_write: false }
+  const headSha = G.revParse(root, 'HEAD')
+  if (!headSha) throw new UserError(`${fwd(root)} is a git repository with no commits yet, so there is nothing to compare a change against. Make the first commit, then review again.`, { code: 2 })
   const branch = G.gitOut(root, ['rev-parse', '--abbrev-ref', 'HEAD'])
   const dirty = !!G.gitOut(root, ['status', '--porcelain'])
   const baseRef = args.base || G.defaultBaseRef(root)
-  const headSha = G.revParse(root, 'HEAD')
   if (!['all', 'uncommitted', 'staged', 'branch'].includes(scope)) throw new UserError(`Unknown --scope "${scope}" (all | uncommitted | staged | branch).`)
 
   let from, to, tree = null

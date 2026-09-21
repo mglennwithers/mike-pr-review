@@ -1,5 +1,10 @@
 name: selftest
 on: [push, pull_request]
+
+# Nothing here needs write access, and on a public repository this workflow runs code from fork
+# pull requests: `pull_request` (not `pull_request_target`) keeps that code away from secrets.
+permissions:
+  contents: read
 jobs:
   selftest:
     strategy:

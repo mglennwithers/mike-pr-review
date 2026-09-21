@@ -2,7 +2,9 @@
 
 A Claude Code skill that reviews a GitHub pull request, or your local changes, through a set of specialised review lenses run as sub-agents.
 Every finding is then attacked by separate verifier agents (which run tests where that is allowed), and only findings that survive are shown as postable, in a traffic-light report.
-Nothing is posted to GitHub until you have seen the report and chosen an action. Reviews are remembered, so a re-review covers only new commits and never repeats a comment.
+Nothing is posted to GitHub until you have seen the report and chosen an action — a rule the orchestrating model follows, and one you can enforce in code with the optional hook (see [Safety](#safety)). Reviews are remembered, so a re-review covers only new commits and never repeats a comment.
+
+Verifiers may **run the code under review** — only your own work and authors you have explicitly trusted — as you, with your network access and credentials within reach, and there is no sandbox. Read [Safety](#safety) before your first review of somebody else's pull request.
 
 Invoke it with `/pr-review [target] [options]`, or ask Claude to review a PR or your changes.
 
@@ -38,9 +40,15 @@ Clone or copy this repository into one of:
 - `~/.claude/skills/pr-review` (on Windows: `%USERPROFILE%\.claude\skills\pr-review`): available in every project;
 - `<project>/.claude/skills/pr-review`: available in that project only. Review data still goes to the state home (see [Configuration](#configuration)), not into the project.
 
+macOS, Linux, Git Bash:
 ```
 git clone <repository URL> ~/.claude/skills/pr-review
 node ~/.claude/skills/pr-review/scripts/prr.mjs selftest
+```
+Windows PowerShell (`~` is not expanded for native commands there):
+```
+git clone <repository URL> $env:USERPROFILE\.claude\skills\pr-review
+node $env:USERPROFILE\.claude\skills\pr-review\scripts\prr.mjs selftest
 ```
 
 Keep the folder name `pr-review`, the same as `name:` in `SKILL.md`: `/pr-review` is the slash command, and the usage measurement looks for that skill name in Claude Code's transcripts. The scripts find their own location, so the skill works from any directory.
@@ -91,9 +99,9 @@ The snippet above is the intended minimum; it has not been verified under a lock
    node scripts/prr.mjs fixture --name shop --dir <an empty temporary directory>
    ```
    Open Claude Code in that directory and run `/pr-review local --profile lean`. In local mode there is no GitHub target, so nothing can be posted. You will see the plan with its estimate, the traffic-light report, a `Usage:` line with the measured token use, and a question about what to do next. Afterwards `node scripts/prr.mjs score --run <run dir>` compares the result with the fixture's answer key.
-3. **A real PR, looking before spending.** From a clone of the repository:
+3. **A real PR, looking before spending.** From a clone of the repository under review (so `--cwd .` points at it, while the script itself lives in the skill directory):
    ```
-   node scripts/prr.mjs start --target <PR number or URL> --cwd .
+   node ~/.claude/skills/pr-review/scripts/prr.mjs start --target <PR number or URL> --cwd .
    ```
    `start` collects the diff and prints the plan: tier, lenses, models, estimated sub-agents and estimated spend. It starts no model and costs no tokens. When you run the review through `/pr-review`, the same plan is shown before the engine starts.
 4. **Seeing exactly what would be posted.** After a review, `node scripts/prr.mjs post --run <run dir> --event COMMENT --dry-run` writes the exact GitHub payload to `<run dir>/review-payload.json` and posts nothing. You can also ask Claude for a dry run at the approval question.
@@ -204,7 +212,7 @@ What the scripts enforce:
 - **Approval token.** In PR mode `prr render` prints a random token tied to this run's reviewed head and its set of postable findings. `prr post` refuses to publish without `--approval <token>`, and the token stops matching when that set changes (exit 10); a PR head that moved on GitHub since `collect` is caught separately by the live check before posting (exit 5). `--event NONE` (record without posting), `--dry-run` and `--record-only` need no token. The token guarantees that a post follows a report that was actually rendered in its current form. It does not prove that you were asked; see [Hard enforcement](#hard-enforcement).
 - **Spend gate.** Above the `confirm_above` limits, or with the `max` profile, `prr plan` prints `CONFIRM_SPEND` instead of the engine arguments and exits 9 until it is re-run with `--confirmed`; `prr lenses` (Agent-tool engine) refuses the same way.
 - **Code execution is limited to code you can be assumed to trust.** Verifiers may run code only for: your own PR (its author is the authenticated account), a same-repository PR whose author is on your trust list, and your own local work. `prr trust add <login> [--repo owner/name]`, `prr trust remove …` and `prr trust list` manage the list (stored in `<state home>/config.json`; by default nobody is on it). Other people's fork PRs (also when their author is on the list), other people's PRs whose source repository is unknown, same-repository branches of authors not on the list, and PRs on a host accepted through `--allow-host` are read but not run. A **local branch that contains commits by other people** is not run either: for the scopes that include commits, the commit author e-mails are compared with the identity git would commit with, and any other address switches execution off (uncommitted and staged work counts as yours). That check catches the ordinary case of a checked-out colleague's branch; an author e-mail is whatever the committer typed, so it is not protection against a forged identity. `--trust-code` on `plan` overrides all of this for one review, `--no-tests` switches execution off; the `collect` summary always states `Code execution: allowed / NOT allowed` and why.
-- **Your working copy is not touched.** Agents read, and tests run, in a throwaway `git worktree` checkout inside the run directory. Local snapshots are built with a temporary index, so your index, stash and files stay as they are. `git worktree prune` is never run in your repository.
+- **Your working copy is not touched** (unless you pass `collect --no-worktree` — see [Configuration](#configuration)). Agents read, and tests run, in a throwaway `git worktree` checkout inside the run directory. Local snapshots are built with a temporary index, so your index, stash and files stay as they are. `git worktree prune` is never run in your repository.
 - **Git is shielded from your configuration.** Every git command the skill runs pins the settings that would change what git prints or make it run somebody's code: hooks are pointed at a directory that holds none, so no hook (for example `post-checkout`) ever runs in the review checkout; diff prefixes and blank-line style are fixed so parsed line numbers cannot shift; external diff and textconv drivers are off; commit signing is off and a fixed identity is used for the throwaway snapshot commits, so no git identity or GPG setup is needed; terminal and credential-manager prompts are disabled so nothing can hang waiting for input.
 - **Host allow-list.** A PR is only fetched from `github.com`, the host in `GH_HOST`, or the origin host of the clone you are in. Any other host in a PR URL is refused before anything is contacted, unless you pass `--allow-host <host>`, and even then nothing that host reports can unlock code execution. An origin that uses an SSH host alias is refused with the advice to pass the full PR URL.
 - **Token scoping.** `GH_TOKEN`, `GITHUB_TOKEN` and `GITHUB_PERSONAL_ACCESS_TOKEN` are only ever sent to `github.com`; `GH_ENTERPRISE_TOKEN` / `GITHUB_ENTERPRISE_TOKEN` only to the host named in `GH_HOST`. The git credential helper is asked only if you opt in (`--use-git-credential` or `PR_REVIEW_USE_GIT_CREDENTIAL=1`); the choice is remembered for that run's `post`. `PR_REVIEW_API_BASE` is honoured only for plain loopback URLs. When `gh` is the transport and a repository has to be cloned over https, gh's credential helper is passed to git on the command line for those commands; your git configuration is not modified.
@@ -386,4 +394,4 @@ How to read the results:
 
 ## License
 
-MIT — see [LICENSE](LICENSE). The seeded-bug fixtures under `evals/fixtures/` are covered by it too.
+MIT — see [LICENSE](LICENSE). The seeded-bug fixtures under `evals/fixtures/` are covered by it too; they are synthetic and deliberately defective, as `evals/fixtures/README.md` explains.

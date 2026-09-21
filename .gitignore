@@ -5,3 +5,11 @@ Thumbs.db
 
 # never commit a dependency tree: the skill has no dependencies
 node_modules/
+
+# never commit local configuration or editor state
+.env
+.env.*
+!.env.example
+.vscode/
+.idea/
+*.log
