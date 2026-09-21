@@ -474,6 +474,54 @@
       "file": "scripts/cmd/stats.mjs",
       "from": "const typed = runs.filter((r) => r.findings_by)",
       "to": "const typed = runs"
+    },
+    {
+      "name": "calibrate: a rubber-stamped false claim fails the run",
+      "file": "scripts/cmd/calibrate.mjs",
+      "from": "if (stamped.length) process.exitCode = 1",
+      "to": "if (false) process.exitCode = 1"
+    },
+    {
+      "name": "calibrate: a claim no verifier judged counts against neither rate",
+      "file": "scripts/cmd/calibrate.mjs",
+      "from": "const UNJUDGED = new Set(['missing', 'unverifiable', 'not reported'])",
+      "to": "const UNJUDGED = new Set(['missing'])"
+    },
+    {
+      "name": "calibrate: the answer key never names the truth in the lens result",
+      "file": "scripts/cmd/calibrate.mjs",
+      "from": "findings: claims.map((c) => Object.fromEntries(FINDING_FIELDS.filter((k) => c[k] !== undefined).map((k) => [k, c[k]])))",
+      "to": "findings: claims.map((c) => ({ ...c }))"
+    },
+    {
+      "name": "calibrate: the answer key is written outside the run directory",
+      "file": "scripts/cmd/calibrate.mjs",
+      "from": "writeJson(calibrationKey(runDir), { v: 1, fixture: name",
+      "to": "writeJson(path.join(runDir, 'calibration.json'), { v: 1, fixture: name"
+    },
+    {
+      "name": "calibrate: claims are paired to findings by path as well as title",
+      "file": "scripts/cmd/calibrate.mjs",
+      "from": "findings.find((f) => f.path === c.path && norm(f.title) === norm(c.title))",
+      "to": "findings.find((f) => norm(f.title) === norm(c.title))"
+    },
+    {
+      "name": "calibrate: a claim about a file the fixture lacks is refused",
+      "file": "scripts/cmd/calibrate.mjs",
+      "from": "  const gone = claims.find((c) => !fs.existsSync(path.join(runDir, 'wt', c.path)))\n",
+      "to": "  const gone = null\n"
+    },
+    {
+      "name": "score: refuses a calibration run instead of inventing a recall figure",
+      "file": "scripts/cmd/bench.mjs",
+      "from": "if (isCalibrationRun(runDir)) throw new UserError(",
+      "to": "if (false) throw new UserError("
+    },
+    {
+      "name": "stats: calibration runs are kept out of the review statistics",
+      "file": "scripts/cmd/stats.mjs",
+      "from": "const runs = allRuns.filter((r) => !r.calibration &&",
+      "to": "const runs = allRuns.filter((r) =>"
     }
   ]
 }

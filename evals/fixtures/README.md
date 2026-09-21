@@ -16,8 +16,14 @@ Build one and review it:
     # review that directory with /pr-review local, then:
     node scripts/prr.mjs score --run <run dir>
 
-`shop` is small JavaScript; `ledger` is a larger Python change touching authentication and money, and its tests
-need a Python interpreter. See `references/metrics.md`.
+`shop` is small JavaScript. `ledger` is a larger Python change touching authentication and money, and its tests need a
+Python interpreter. `parity` is a JavaScript webhook relay whose every seeded defect needs a SECOND file to confirm —
+a guard added at one call site and not its sibling, one rule implemented twice and changed once, documentation and an
+error message made false by code elsewhere — the class a reviewer reading one file at a time cannot see.
+
+`evals/calibration.json` is not a fixture: it holds claims about `shop` whose truth is known, which `prr calibrate`
+feeds to the verifiers to measure whether verification discriminates or rubber-stamps. Its `truth` and `why` fields are
+the answer key and never reach an agent. See `references/metrics.md`.
 
 **Do not put this warning inside `base/` or `change/`.** Those trees are what the review agents read: a comment
 saying the file contains deliberate defects would prime them, and inserting lines would shift the line numbers

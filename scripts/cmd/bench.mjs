@@ -4,7 +4,7 @@
 // A score is one sample of a process with large run-to-run variance: compare configurations over several runs each.
 import fs from 'node:fs'
 import path from 'node:path'
-import { SKILL_DIR, UserError, fwd, parseArgs, readJson, requireRun, run, writeJson } from '../lib/util.mjs'
+import { SKILL_DIR, UserError, fwd, isCalibrationRun, parseArgs, readJson, requireRun, run, writeJson } from '../lib/util.mjs'
 import { prepare } from '../lib/report.mjs'
 import { collectUsage, fmtCost, fmtTokens } from '../lib/usage.mjs'
 import { appendEvent } from '../lib/metrics.mjs'
@@ -45,6 +45,8 @@ export function score(argv) {
   // (Same guard as `render`: a run that was planned but never put through the engine has nothing to score.)
   const args = parseArgs(argv)
   const runDir = requireRun(args)
+  // Prepared claims, not a review: scoring them against the answer key would record a recall figure nobody earned.
+  if (isCalibrationRun(runDir)) throw new UserError(`${fwd(runDir)} is a calibration run: its findings were written by \`prr calibrate\`, not by a lens, so scoring them against the answer key would record a recall figure nobody earned.\nNEXT: prr calibrate --score --run "${fwd(runDir)}"`)
   const R = prepare(runDir)
   const name = args.fixture || R.ctx.fixture
   if (!name) throw new UserError('This run was not made on a fixture repo (no .git/prr-fixture marker). Pass --fixture <name> to score it anyway.')

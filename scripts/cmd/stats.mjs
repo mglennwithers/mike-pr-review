@@ -24,7 +24,9 @@ export function aggregate(events, f = {}) {
   const wellFormed = (e) => e.type === 'run' && e.run_id && e.funnel && e.decisions && e.verification
   for (const e of events) if (wellFormed(e) && inScope(e)) byId.set(e.run_id, e) // a run recorded twice (posted later): last wins
   const allRuns = [...byId.values()]
-  const runs = allRuns.filter((r) => (f.include_fixtures ? true : !r.fixture))
+  // A calibration run measures the verifiers with invented claims: its funnel and lens numbers are about the answer
+  // key, not about anybody's code, so it never belongs in these statistics.
+  const runs = allRuns.filter((r) => !r.calibration && (f.include_fixtures ? true : !r.fixture))
   const measured = runs.filter((r) => r.usage && r.usage.source === 'transcripts' && r.usage.cost != null)
 
   // cost by profile x tier

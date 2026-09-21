@@ -105,6 +105,11 @@ export function withLock(file, fn, { waitMs = 3000, staleMs = 15000 } = {}) {
   try { return fn() } finally { if (held) fs.rmSync(lock, { force: true }) }
 }
 
+// The answer key of a calibration run is kept out of the run directory on purpose: every agent is told the run
+// directory's path, and a file in it saying which claims were invented would be the one thing that must not be readable.
+export const calibrationKey = (runDir) => path.join(HOME_DIR, 'calibration', path.basename(String(runDir).replace(/[\\/]+$/, '')) + '.json')
+export const isCalibrationRun = (runDir) => fs.existsSync(calibrationKey(runDir))
+
 export function writeText(file, text) {
   fs.mkdirSync(path.dirname(file), { recursive: true })
   fs.writeFileSync(file, text)

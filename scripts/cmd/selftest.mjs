@@ -434,6 +434,84 @@ export default async function selftest(argv = []) {
     prr('cleanup', '--run', shopRun)
     ok('benchmark: fixture repo, answer-key scoring (recall, bait hits, lens miss vs verifier miss), kept apart in stats')
 
+    // -- calibration: claims of KNOWN truth through the real verification path. A verifier that confirms an invented
+    // finding is a rubber stamp, and nothing else in this suite can tell one from a verifier that thinks.
+    const claimsFile = path.join(tmp, 'claims.json')
+    const claim = (id, truth, o) => ({ id, fixture: 'shop', truth, path: 'src/cart.js', line: 12, end_line: 12, anchor: '', severity: 'yellow', category: 'correctness',
+      body: 'b', scenario: 's', evidence: 'e', self_confidence: 80, self_importance: 70, why: 'ANSWER-KEY-MARKER: no agent may ever read this', ...o })
+    fs.writeFileSync(claimsFile, JSON.stringify({ claims: [
+      claim('cal-false-1', 'false', { title: 'applyCoupon double-counts the discount on repeat calls' }),
+      claim('cal-false-2', 'false', { line: 23, end_line: 23, title: 'receiptLines drops the last item of every cart' }),
+      claim('cal-true-1', 'true', { line: 7, end_line: 7, severity: 'red', title: 'averageItemPrice returns NaN for an empty cart' }),
+      // same TITLE as cal-false-1 in a different file: pairing that ignores the path would pair it to that finding
+      claim('cal-gone', 'true', { path: 'src/orders.js', line: 15, end_line: 15, title: 'applyCoupon double-counts the discount on repeat calls' }),
+      claim('cal-elsewhere', 'false', { fixture: 'ledger', path: 'ledger/post.py', title: 'claim about another fixture' }),
+    ] }))
+    r = prr('calibrate', '--dir', path.join(tmp, 'calib-fixture'), '--claims', claimsFile); assert.equal(r.code, 0, r.stderr + r.stdout)
+    const calibRun = r.stdout.match(/^RUN_DIR=(.+)$/m)[1].trim()
+    const calibCtx = JSON.parse(fs.readFileSync(path.join(calibRun, 'context.json'), 'utf8'))
+    assert.equal(calibCtx.calibration, undefined, 'context.json is named to every agent: it must not say this is a calibration run')
+    assert.equal(calibCtx.fixture, 'shop', 'a calibration run is a fixture run, so stats already keeps it out of the review totals')
+    const keyFile = path.join(home, 'calibration', path.basename(calibRun) + '.json')
+    assert.ok(fs.existsSync(keyFile), 'the answer key lives outside the run directory'); assert.ok(!fs.existsSync(path.join(calibRun, 'calibration.json')))
+    const calibKey = JSON.parse(fs.readFileSync(keyFile, 'utf8'))
+    assert.deepEqual(calibKey.claims.map((c) => c.id), ['cal-false-1', 'cal-false-2', 'cal-true-1', 'cal-gone'], 'only the claims of this fixture are in this run')
+    const lensOut = JSON.parse(fs.readFileSync(path.join(calibRun, 'lens', `${calibKey.shard}.json`), 'utf8'))
+    assert.equal(lensOut.findings.length, 4); assert.ok(lensOut.findings.every((f) => f.truth === undefined && f.why === undefined && f.id === undefined), 'only finding fields go into a lens result')
+    const walk = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.name === 'wt' ? [] : e.isDirectory() ? walk(path.join(dir, e.name)) : [path.join(dir, e.name)]))
+    for (const abs of walk(calibRun)) {
+      assert.doesNotMatch(fs.readFileSync(abs, 'utf8'), /ANSWER-KEY-MARKER|"truth"|calibration/i, `${path.relative(calibRun, abs)} must not carry the answer key or admit what this run is: an agent that can see which claims are invented measures nothing`)
+    }
+    const calibCands = JSON.parse(fs.readFileSync(path.join(calibRun, 'candidates.json'), 'utf8'))
+    assert.equal(calibCands.length, 4, 'four distinct claims, four candidates')
+    const calibId = (s) => calibCands.find((c) => c.title.includes(s)).id
+    const CV = (id, stance, o) => fs.writeFileSync(path.join(calibRun, 'verdicts', `${id}-${stance}.json`), JSON.stringify({ finding_id: id, stance, introduced_by_change: 'yes', reproduced: false, evidence: 'checked', ...o }))
+    CV(calibId('averageItemPrice'), 'reproduce', { verdict: 'confirmed', confidence: 95, severity: 'red', importance: 85, reproduced: true, test: { ran: true, command: 'node --test', outcome: 'fail' } })
+    CV(calibId('applyCoupon'), 'refute', { verdict: 'confirmed', confidence: 88, severity: 'yellow', importance: 60 }) // the rubber stamp
+    CV(calibId('receiptLines'), 'refute', { verdict: 'refuted', confidence: 15, severity: 'drop', importance: 10 })
+    // a claim whose finding never reached results.json (the cap dropped it, a chore covered it) is reported, not counted
+    fs.writeFileSync(path.join(calibRun, 'candidates.json'), JSON.stringify(calibCands.filter((c) => c.path !== 'src/orders.js')))
+    assert.equal(prr('aggregate', '--run', calibRun).code, 0)
+    r = prr('calibrate', '--score', '--run', calibRun)
+    assert.equal(r.code, 1, 'a known-false claim that ended postable must fail the run: ' + r.stdout)
+    assert.match(r.stdout, /FAILED: 1 known-false claim\(s\) ended postable: cal-false-1/); assert.match(r.stdout, /False claims stopped 1\/2/)
+    assert.match(r.stdout, /cal-gone \| true \| missing/, 'an unpaired claim is reported'); assert.match(r.stdout, /true claims kept 1\/1/, 'and counted against neither rate')
+    CV(calibId('applyCoupon'), 'refute', { verdict: 'refuted', confidence: 20, severity: 'drop', importance: 10 })
+    assert.equal(prr('aggregate', '--run', calibRun).code, 0)
+    r = prr('calibrate', '--score', '--run', calibRun); assert.equal(r.code, 0, r.stdout + r.stderr)
+    assert.match(r.stdout, /False claims stopped 2\/2 \(100%\)/); assert.match(r.stdout, /Every known-false claim was stopped/)
+    assert.equal(JSON.parse(fs.readFileSync(path.join(calibRun, 'calibration-score.json'), 'utf8')).false_postable.length, 0)
+    prr('cleanup', '--run', calibRun)
+    // a claim about a file the fixture does not have would be refuted for the wrong reason and scored as a stop
+    const badFile = path.join(tmp, 'claims-badfile.json')
+    fs.writeFileSync(badFile, JSON.stringify({ claims: [claim('cal-nofile', 'false', { path: 'src/does-not-exist.js', title: 'a claim about a file that is not there' })] }))
+    r = prr('calibrate', '--dir', path.join(tmp, 'calib-badfile'), '--claims', badFile)
+    assert.notEqual(r.code, 0, 'a claim about a missing file must be refused, not sent to a verifier'); assert.match(r.stderr + r.stdout, /does not contain/)
+    // a calibration run is about the answer key, not about anybody's code: it must not move the review statistics
+    // --include-fixtures deliberately counts benchmark runs; a calibration run must stay out even there, because its
+    // findings were invented rather than found, so without that guard it would be counted as a benchmark.
+    const reviewCount = (...extra) => prr('stats', '--since', '30d', ...extra).stdout.match(/\*\*(\d+) review\(s\)\*\*/)[1]
+    const statsBefore = reviewCount(), statsBeforeAll = reviewCount('--include-fixtures')
+    assert.equal(prr('post', '--run', calibRun, '--event', 'NONE').code, 0, 'recording it is allowed; counting it is not')
+    const calibEv = readEventLog(home).filter((e) => e.type === 'run').pop()
+    assert.equal(calibEv.calibration, true, 'the record says what kind of run it was')
+    assert.equal(reviewCount(), statsBefore, 'and the review count does not move')
+    assert.equal(reviewCount('--include-fixtures'), statsBeforeAll, 'not even with --include-fixtures, which counts real benchmark runs')
+    // a claim whose verifiers all died is NOT one that verification stopped
+    const deadRun = (() => {
+      const r2 = prr('calibrate', '--dir', path.join(tmp, 'calib-dead'), '--claims', claimsFile); assert.equal(r2.code, 0, r2.stderr + r2.stdout)
+      return r2.stdout.match(/^RUN_DIR=(.+)$/m)[1].trim()
+    })()
+    assert.equal(prr('aggregate', '--run', deadRun, '--skip-escalation', '--skip-tiebreak').code, 0, 'no verdict files at all: every claim is unverified')
+    r = prr('calibrate', '--score', '--run', deadRun)
+    assert.equal(r.code, 0, r.stderr + r.stdout); assert.match(r.stdout, /never judged by a verifier/)
+    assert.doesNotMatch(r.stdout, /False claims stopped 2\/2/, 'a run nobody judged must not score as verification working')
+    assert.match(r.stdout, /False claims stopped 0\/0/)
+    // scoring it as a benchmark would invent a recall figure
+    r = prr('score', '--run', deadRun); assert.notEqual(r.code, 0); assert.match(r.stderr + r.stdout, /is a calibration run/)
+    assert.ok(!readEventLog(home).some((e) => e.type === 'benchmark' && e.run_id === path.basename(deadRun)), 'and records no benchmark event')
+    ok('calibrate: claims of known truth through merge → verify → aggregate; the answer key reaches no agent; a rubber-stamped false claim exits non-zero')
+
     r = prr('collect', '--target', 'local'); assert.equal(r.code, 2, 'unchanged tree should short-circuit'); assert.match(r.stdout, /NOTHING_NEW/)
     fs.appendFileSync(path.join(repo, 'src', 'calc.js'), '\nexport const ZERO = 0\n')
     r = prr('collect', '--target', 'local'); assert.equal(r.code, 0, r.stderr)

@@ -57,6 +57,40 @@ Use when the user asks how good the skill is, wants to compare profiles, or has 
 
 **Run every configuration several times before drawing a conclusion.** Models are stochastic and run-to-run variance is large: the same profile on the same fixture can find a bug in one run and miss it in the next. Treat a single missed bug as a hint and a repeated one as a fact, and compare configurations only on repeated runs. `prr stats` shows only the latest score per fixture × profile × variant; every score is in the log as a `benchmark` event (and in `<RUN_DIR>/score.json`), so report the spread across runs, not one number. A fixture that lenses or prompts were tuned against overstates recall on other code — after such tuning, check on a fixture that was not used for it.
 
-Fixtures shipped: `shop` (JavaScript, a small change, 5 defects + 1 bait — exercises the single-pass small-change path; its tests run with `node --test`) and `ledger` (Python, standard library only, a large change touching auth and money, 8 defects + 2 baits — exercises sharding, the critical-area model upgrade, escalating verification and the duplicate merge; verifiers need a Python interpreter to run its tests).
+Fixtures shipped: `parity` (JavaScript, a webhook relay; 6 defects + 2 baits, every one of which needs a SECOND file to confirm — a half-finished fix, one rule implemented twice and changed once, docs and a user-facing message made false by code elsewhere, a caller's contract changed with one callee updated; this is the class a per-file reader misses), `shop` (JavaScript, a small change, 5 defects + 1 bait — exercises the single-pass small-change path; its tests run with `node --test`) and `ledger` (Python, standard library only, a large change touching auth and money, 8 defects + 2 baits — exercises sharding, the critical-area model upgrade, escalating verification and the duplicate merge; verifiers need a Python interpreter to run its tests).
 
 To add a fixture, create `evals/fixtures/<name>/{base/,change/,expected.json}` following `shop` (an optional `uncommitted/` directory is copied on top without being committed). `base/` is committed on `main`, `change/` on a feature branch. A good fixture has 4-8 seeded defects of mixed severity in different lenses, at least one bait, and enough innocent code around them that they are not the only thing to look at. Code from the user's own domain makes the most telling fixture.
+
+## Calibration: does verification discriminate?
+
+Recall says how much a review finds. It says nothing about the other half of the promise — that a finding which survives
+verification is worth posting. On ordinary lens output nothing can: every candidate might be true, so a verifier that
+confirms everything and one that reads the code look identical. `prr calibrate` removes that blindness by handing the
+verifiers claims whose truth is already known.
+
+```
+prr calibrate --dir <empty dir> [--fixture shop] [--profile <name>] [--claims <file>]   build and prepare the claims
+   … verify them exactly as in a real review (the VERIFY lines it prints), then `prr aggregate` …
+prr calibrate --score --run <RUN_DIR>                                                   score the verdicts
+```
+
+The claims live in `evals/calibration.json`, each with a `truth` of `"true"` or `"false"` and a `why` explaining what
+makes it so. Neither reaches any agent: the command copies an allow-list of finding fields into the lens result, and the
+answer key is written to `<state home>/calibration/<run id>.json`, outside the run directory, because every agent is told
+the run directory's path. Nothing in the run says it is a calibration.
+
+`--score` reports two rates that fail in opposite directions:
+
+- **False claims stopped** — invented findings that verification refuted or kept below the posting bar. A low rate means
+  the verifiers are rubber-stamping, and "only findings that survive verification are posted" is not protecting anyone.
+- **True claims kept** — real defects that survived. A low rate means over-skepticism, which costs recall just as surely.
+
+Claims that no verifier judged (its agents died, or its own lens rated it a nit) are reported and counted against
+neither rate: a run whose verifiers all failed must not score as verification working. A false claim its verifier
+*confirmed* that only the importance floor kept out is named too — the thresholds stopped that one, not the verifier.
+`--score` exits non-zero if any known-false claim ended postable. A calibration run is excluded from `prr stats`, and
+`prr score` refuses it rather than recording a recall figure nobody earned.
+
+Writing claims is the hard part: a false claim that gives itself away measures nothing. Keep the true and false sets
+indistinguishable in tone, length and `self_confidence` — any field that correlates with truth is a shortcut a verifier
+can take instead of reading the code — and make every false claim refutable from the code rather than by taste.

@@ -24,6 +24,8 @@ const HELP = `pr-review helper
   stats     [--since 30d] [--profile p] [--repo o/r] [--mode pr|local] [--include-fixtures] [--json]   cost and effectiveness across all recorded reviews
   fixture   --name <fixture> --dir <empty dir>                                     create a seeded-bug benchmark repo
   score     --run <dir> [--fixture name]                                           recall / precision of a run against the fixture's answer key
+  calibrate --dir <empty dir> [--fixture shop] [--profile p] [--claims <file>] [--quiet]   does verification discriminate? claims of known truth through the real verifiers
+            --score --run <dir>                                                    score one: exits 1 if a known-false claim ended postable
   profiles                                                                         list budget profiles
   build-workflow [--check]                                                         regenerate workflows/review.workflow.js from its template + lib/core.mjs (--check: only verify it is current)
   selftest  [--show]                                                               run the offline self-test (--show prints the sample report)
@@ -60,6 +62,7 @@ async function main() {
     case 'stats': return (await import('./cmd/stats.mjs')).default(rest)
     case 'fixture': return (await import('./cmd/bench.mjs')).fixture(rest)
     case 'score': return (await import('./cmd/bench.mjs')).score(rest)
+    case 'calibrate': return (await import('./cmd/calibrate.mjs')).default(rest)
     case 'usage': {
       const U = await import('./lib/usage.mjs')
       const a = parseArgs(rest, { booleans: ['json'] })

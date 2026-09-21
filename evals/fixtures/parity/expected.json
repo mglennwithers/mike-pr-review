@@ -1,0 +1,114 @@
+{
+  "_doc": "Answer key for the 'parity' benchmark fixture. `base/` is committed on main; `change/` is overlaid and committed on a feature branch. `prr score` counts a seeded bug as FOUND when a verified (postable) finding sits in the same file within `tolerance` lines of the range AND its title+body matches `match` (case-insensitive regex). A verified finding on a bait is a false positive. Verified findings that match nothing are listed as 'extra' for a human to judge (they may be legitimate). Line numbers are in the NEW version of each file. What this fixture measures is different from shop and ledger: NO seeded defect is visible in the file it is anchored in. Every one of them needs a second file (named in its `note`), so a reader who stays inside one file sees plausible code. The tests pass on BOTH trees on purpose: a defect a test already catches is not the class under study, and a failing test here means a broken fixture. Every seeded defect needs a SECOND file to confirm: the fixture tests cross-file reasoning by one agent, not sharding — at its size every lens gets a single shard, so both sides of a defect are in front of the same reader. Two defects leave a smell in the file they are anchored in; none can be confirmed there.",
+  "name": "parity",
+  "description": "Small Node webhook relay (ES modules, `node --test`, 17 short files in the change): one feature branch adding pausing, bulk import, replay and a dead-letter queue, with 6 seeded defects that only exist between two files — a half-finished guard, one rule implemented twice, a stale README claim, a changed unit one caller missed, a user-facing message that contradicts the code, and a duplicated limit — plus 2 baits that look like the same kinds of defect and are refuted by the other side.",
+  "branch": "feature/pause-and-dead-letters",
+  "commit_message": "Add pausing, bulk import, replay and a dead-letter queue; move retry times to seconds",
+  "tolerance": 3,
+  "expected": [
+    {
+      "id": "import-skips-internal-target-guard",
+      "kind": "bug",
+      "severity": "red",
+      "lens": "security",
+      "path": "src/import.js",
+      "lines": [
+        6,
+        9
+      ],
+      "match": "assertnotinternal|internal|loopback|private|ssrf|127\\.|localhost|own network",
+      "note": "HALF-FINISHED FIX. The change adds `assertNotInternal` in src/validate.js and calls it at ONE of the two subscription-creation sites: src/subscriptions.js createSubscription, one line after validateTarget. importSubscriptions builds the same record and calls validateTarget only, so POST /admin/import accepts a target POST /subscriptions rejects. Read on its own, import.js validates and looks finished. The other side is src/subscriptions.js createSubscription. Demonstrate: importSubscriptions(store, [{ target: 'https://127.0.0.1/hook', event_type: 'invoice.paid', secret: 'a-long-enough-secret' }]) returns a subscription; createSubscription with the same target throws."
+    },
+    {
+      "id": "replay-ignores-paused",
+      "kind": "bug",
+      "severity": "red",
+      "lens": "correctness",
+      "path": "src/replay.js",
+      "lines": [
+        4,
+        7
+      ],
+      "match": "paus|deliverab|held",
+      "note": "ONE RULE IMPLEMENTED TWICE. replay() picks its targets with the base rule (`status === 'active'`), which is what 'may this subscription be delivered to' meant before this change; src/deliver.js dispatch() now asks isDeliverable() (src/subscriptions.js), which also excludes `paused`. So a replay delivers to an endpoint the customer paused, against the README and against what POST /subscriptions/:id/pause answers. The other side is src/subscriptions.js isDeliverable (used in src/deliver.js dispatch). Demonstrate: pause a subscription, POST /events (the delivery is held), then POST /admin/replay with the same event — the transport is called."
+    },
+    {
+      "id": "retry-at-milliseconds",
+      "kind": "bug",
+      "severity": "red",
+      "lens": "correctness",
+      "path": "src/deliver.js",
+      "lines": [
+        40,
+        40
+      ],
+      "match": "millisecond|\\bms\\b|\\bseconds\\b|in seconds|unit|date\\.now|epoch|1000",
+      "note": "CHANGED CONTRACT, ONE CALLER NOT FOLLOWED. backoff.nextDelay returns SECONDS now (it was nextDelayMs); the queue added by this change is an epoch-seconds domain (src/queue.js nowSeconds/schedule/due, and the README says so). send() took the new name but kept `Date.now() +`, so retryAt is a millisecond epoch: queue.due() never returns the delivery and no retry ever runs. queue.schedule(delivery, nextDelay(...)) is the call that was meant, added by this change and never used. The other side is src/queue.js (or src/backoff.js). Demonstrate: one failed dispatch, then due(store, nowSeconds() + 31536000) is still empty."
+    },
+    {
+      "id": "dead-letter-gives-up-early",
+      "kind": "bug",
+      "severity": "yellow",
+      "lens": "correctness",
+      "path": "src/deadletter.js",
+      "lines": [
+        3,
+        6
+      ],
+      "match": "max_attempts|\\b8\\b|eight|out of sync|diverg|mismatch|disagree|premature|too early",
+      "note": "GIVE_UP_AFTER = 5 in src/deadletter.js against MAX_ATTEMPTS = 8 in src/config.js: the sweep buries a delivery three attempts before the retry loop would have stopped. Naming the constant a magic number is not this defect; the finding has to connect the two values."
+    },
+    {
+      "id": "pause-message-says-dropped",
+      "kind": "bug",
+      "severity": "yellow",
+      "lens": "docs-comments",
+      "path": "src/api.js",
+      "lines": [
+        21,
+        21
+      ],
+      "match": "drop|held|hold|queue|misleading|contradict|inaccurate|untrue",
+      "note": "USER-FACING STRING CONTRADICTING THE CODE. The pause response tells the customer that events are dropped while the subscription is paused. src/deliver.js dispatch() holds them (queue.hold) and resume() sends every held one, which is what the README promises and what test/pause.test.js pins. Someone who pauses to stop a flood is told it is gone and gets all of it on resume. The other side is src/deliver.js (dispatch and resume). Demonstrate: POST /subscriptions/sub_1/pause, POST /events, POST /subscriptions/sub_1/resume — the endpoint receives the event the message called dropped."
+    },
+    {
+      "id": "readme-retry-cap-stale",
+      "kind": "bug",
+      "severity": "yellow",
+      "lens": "docs-comments",
+      "path": "README.md",
+      "lines": [
+        9,
+        10
+      ],
+      "match": "5 minutes|five minutes|capped|\\bcap\\b|3600|1 hour|one hour|60 minutes|max_delay",
+      "note": "DOCUMENTATION MADE FALSE BY THE CHANGE. This change edits the retries bullet (it now names the dead-letter queue) and leaves 'capped at 5 minutes' standing, while src/backoff.js replaced MAX_DELAY_MS = 300000 with MAX_DELAY = 3600 — an hour, twelve times what the sentence promises. The other side is src/backoff.js, pinned by test/backoff.test.js (nextDelay(9) === 3600).",
+      "tolerance": 1
+    },
+    {
+      "id": "bait-held-never-drained",
+      "kind": "bait",
+      "path": "src/queue.js",
+      "lines": [
+        3,
+        7
+      ],
+      "tolerance": 1,
+      "match_in": "title",
+      "match": "held|stranded|orphan|parked|never (released|drained|returned|requeued)|lost for ever|forever",
+      "note": "store.held is filled by hold() and emptied by takeHeld() at src/queue.js:9-14, but nothing in queue.js CALLS takeHeld, so from inside this file held deliveries look parked for ever. src/api.js:28 (resume) calls it. Reporting it is a false positive."
+    },
+    {
+      "id": "bait-requeue-unchecked",
+      "kind": "bait",
+      "path": "src/deadletter.js",
+      "lines": [
+        14,
+        19
+      ],
+      "match_in": "title",
+      "match": "paus|deliverab|inactive|active|disabled|bypass|unchecked|skip",
+      "note": "NOT A BUG. requeue() sends a buried delivery out again with no check that its subscription is still active or unpaused — the same shape as the replay defect. It goes through deliver.dispatch(), which selects with subscribers() and holds anything isDeliverable() rejects, so requeueing onto a paused subscription holds the delivery instead of sending it. Reporting a missing active/paused check here is a false positive. (The title match is about that check only: the attempt limit three lines above is a different, real defect.)"
+    }
+  ]
+}

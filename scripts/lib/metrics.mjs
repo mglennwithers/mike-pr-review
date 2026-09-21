@@ -7,7 +7,7 @@
 // disables writing.
 import fs from 'node:fs'
 import path from 'node:path'
-import { HOME_DIR } from './util.mjs'
+import { HOME_DIR, isCalibrationRun } from './util.mjs'
 
 export const METRICS_FILE = path.join(HOME_DIR, 'metrics', 'events.jsonl')
 const enabled = () => !/^(off|0|false|no)$/i.test(process.env.PR_REVIEW_METRICS || '')
@@ -112,7 +112,7 @@ export function runRecord(R, { event, postedFps, dismissedFps, usage, prior }) {
   return {
     type: 'run', run_id: path.basename(ctx.run_dir), key: ctx.mode === 'pr' ? `${ctx.repo.host}/${ctx.repo.owner}/${ctx.repo.name}#${ctx.pr.number}` : `local:${ctx.repo.name}:${ctx.local.branch}`,
     mode: ctx.mode, repo: ctx.repo.owner ? `${ctx.repo.owner}/${ctx.repo.name}` : ctx.repo.name, profile: plan.profile, tier: plan.tier, engine: results.engine || 'unknown',
-    incremental: !!ctx.range.incremental, rebased: !!ctx.range.rebased, fixture: ctx.fixture || null,
+    incremental: !!ctx.range.incremental, rebased: !!ctx.range.rebased, fixture: ctx.fixture || null, calibration: isCalibrationRun(ctx.run_dir),
     size: { files: ctx.stats.files, reviewable: ctx.stats.reviewable_files, added: ctx.stats.added, deleted: ctx.stats.deleted, effective: ctx.stats.effective_lines, risk_points: ctx.stats.risk_points },
     // Who wrote the change under review. Local only, like the rest of this log; `prr stats` never groups by it unless asked.
     author: ctx.mode === 'pr'
