@@ -383,3 +383,7 @@ How to read the results:
 - **`evals/evals.json`** is a set of five behaviour scenarios (a user prompt and the behaviour expected of the skill: asks before posting, stays incremental, keeps a trivial change cheap, does not execute fork code, finds the seeded defects of the `shop` fixture) in the format used by skill-creator style evaluation. They are run with a model in the loop, not by the selftest or CI, and the PR scenarios contain placeholders to fill in.
 - `.gitattributes` normalises line endings to LF and marks the generated workflow; the repository has no dependencies and `node_modules/` is ignored.
 - Record user-visible changes in `CHANGELOG.md` and bump `VERSION`.
+
+## License
+
+MIT — see [LICENSE](LICENSE). The seeded-bug fixtures under `evals/fixtures/` are covered by it too.
