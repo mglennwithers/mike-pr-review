@@ -2,6 +2,7 @@
 // people to ignore them: the finding comes back next run, unchanged, as if nobody had spoken. The follow-up agent has
 // already read the reply and written its assessment; this posts ONE reply into that thread, with the same discipline as
 // posting a review — the user chooses the text and nothing goes out without the approval token `render` printed.
+import crypto from 'node:crypto'
 import path from 'node:path'
 import { UserError, fwd, parseArgs, readJson, requireRun, truncate, writeJson } from '../lib/util.mjs'
 import { prepare, scrubText } from '../lib/report.mjs'
@@ -9,6 +10,10 @@ import { api, detectTransport } from '../lib/github.mjs'
 import { saveState } from '../lib/state.mjs'
 
 // One reply per thread per run: the state remembers which threads we have answered, so a re-run cannot say it twice.
+// The approval is minted by --dry-run over the exact thread and the exact words, so a token can never authorise a reply
+// other than the one the user read. (Reusing the review's own token would have meant "the user saw a report", not
+// "the user approved this sentence" — `post` binds its token the same way, to the findings it covers.)
+const replyBasis = (fp, text) => crypto.createHash('sha1').update(`${fp}\n${text}`).digest('hex').slice(0, 16)
 export default async function reply(argv) {
   const args = parseArgs(argv, { booleans: ['dry_run', 'list', 'force', 'use_git_credential'] })
   const runDir = requireRun(args)
@@ -46,11 +51,18 @@ export default async function reply(argv) {
   const text = scrubText(ctx, body)
   const payload = { body: text, in_reply_to: target.comment_id }
   writeJson(path.join(runDir, 'reply-payload.json'), { fp: target.fp, ...payload })
-  if (args.dry_run) return console.log(`DRY RUN — reply to comment ${target.comment_id} (${target.path}:${target.line}) written to ${ctx.run_dir}/reply-payload.json. Nothing posted.\n\n${text}`)
+  if (args.dry_run) {
+    const token = crypto.randomBytes(4).toString('hex')
+    writeJson(path.join(runDir, 'reply-approval.json'), { token, fp: target.fp, basis: replyBasis(target.fp, text), proposed_at: new Date().toISOString() })
+    return console.log(`DRY RUN — nothing posted. These are the exact words that would go into the thread at ${target.path}:${target.line} (comment ${target.comment_id}):\n\n${text}\n\nShow the user that text. If they want it sent, repeat the command with --approval ${token}; change one character of it and the token stops matching.`)
+  }
 
-  const approval = readJson(path.join(runDir, 'approval.json'), null)
+  const approval = readJson(path.join(runDir, 'reply-approval.json'), null)
   if (!approval || !args.approval || String(args.approval) !== approval.token) {
-    throw new UserError(`Replying needs --approval <token>, the token \`prr render\` prints under the report: a reply is published in the user's name exactly as a review comment is. Render the report, show the user the reply you propose, and send it only after they choose to.`, { code: 10 })
+    throw new UserError(`Replying needs --approval <token>. Propose the reply first: the same command with --dry-run prints the exact words and mints a token for them. A reply is published in the user's name, so it goes out only after they have read it. The review's own approval token does not work here — it says the user saw a report, not that they approved this sentence.`, { code: 10 })
+  }
+  if (approval.fp !== target.fp || approval.basis !== replyBasis(target.fp, text)) {
+    throw new UserError(`That token was minted for a different reply${approval.fp !== target.fp ? ` (for thread ${approval.fp}, not ${target.fp})` : ': the wording has changed since it was approved'}. Propose this one with --dry-run and have the user read it before it is sent.`, { code: 10 })
   }
   const t = detectTransport(ctx.repo.host, { useGitCredential: !!args.use_git_credential || !!ctx.use_git_credential })
   if (!t.canWrite) throw new UserError(`No authenticated GitHub transport (gh CLI or GH_TOKEN); the reply is ready at ${ctx.run_dir}/reply-payload.json.`, { code: 4 })

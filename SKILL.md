@@ -110,7 +110,8 @@ Use `AskUserQuestion`. Never infer consent from the original request ("review an
 **Answering a rebuttal.** When somebody has replied to an earlier comment, offer it as its own question — never send one unasked, and never send the agent's sentence unread:
 ```
 prr reply --run <RUN_DIR> --list                                              what was said, and what the follow-up made of it
-prr reply --run <RUN_DIR> --fp <fp> --body "<text>" --approval <token>        one reply into that thread
+prr reply --run <RUN_DIR> --fp <fp> --body "<text>" --dry-run                propose it: prints the exact words and a token for them
+prr reply --run <RUN_DIR> --fp <fp> --body "<text>" --approval <token>        send exactly those words
 ```
 The body is the user's to approve: propose it, quote what the author wrote, and keep it to the one fact that settles the point. `--dry-run` shows it without posting; the approval token is the same one `render` printed; a thread already answered by this reviewer is refused, because answering twice turns a review into an argument. If the author was right, dismiss the finding instead of replying.
 

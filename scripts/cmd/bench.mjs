@@ -42,11 +42,14 @@ export function fixture(argv) {
 }
 
 export function score(argv) {
-  // (Same guard as `render`: a run that was planned but never put through the engine has nothing to score.)
   const args = parseArgs(argv)
   const runDir = requireRun(args)
   // Prepared claims, not a review: scoring them against the answer key would record a recall figure nobody earned.
   if (isCalibrationRun(runDir)) throw new UserError(`${fwd(runDir)} is a calibration run: its findings were written by \`prr calibrate\`, not by a lens, so scoring them against the answer key would record a recall figure nobody earned.\nNEXT: prr calibrate --score --run "${fwd(runDir)}"`)
+  // Same refusal as `render`: a run that was planned but never put through the engine has nothing to score, and a
+  // bare ENOENT for results.json tells the user nothing about what to do next.
+  if (!fs.existsSync(path.join(runDir, 'results.json'))) throw new UserError(`No results for this run yet, so there is nothing to score: the review engine has not been run, or its output was never ingested.
+NEXT: run the engine, then \`prr render --run "${fwd(runDir)}" --from <the engine's output file>\`, and score it after that.`, { code: 2 })
   const R = prepare(runDir)
   const name = args.fixture || R.ctx.fixture
   if (!name) throw new UserError('This run was not made on a fixture repo (no .git/prr-fixture marker). Pass --fixture <name> to score it anyway.')

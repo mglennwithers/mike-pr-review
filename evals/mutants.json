@@ -582,6 +582,36 @@
       "file": "scripts/lib/metrics.mjs",
       "from": "agents: v.agents, calls: v.api_calls",
       "to": "agents: v.agents"
+    },
+    {
+      "name": "reply: an approval covers one thread and one wording",
+      "file": "scripts/cmd/reply.mjs",
+      "from": "if (approval.fp !== target.fp || approval.basis !== replyBasis(target.fp, text)) {",
+      "to": "if (false) {"
+    },
+    {
+      "name": "reply: the review token does not authorise a reply",
+      "file": "scripts/cmd/reply.mjs",
+      "from": "readJson(path.join(runDir, 'reply-approval.json'), null)",
+      "to": "readJson(path.join(runDir, 'approval.json'), null)"
+    },
+    {
+      "name": "state: a thread already answered stays answered after a concurrent save",
+      "file": "scripts/lib/state.mjs",
+      "from": "for (const k of ['replied_at', 'reply_comment_id', 'comment_id', 'posted_at']) if (theirs[k] && !mine[k]) mine[k] = theirs[k]",
+      "to": ""
+    },
+    {
+      "name": "render: refuses cleanly before the engine has run",
+      "file": "scripts/cmd/publish.mjs",
+      "from": "if (!fs.existsSync(path.join(runDir, 'results.json'))) throw new UserError",
+      "to": "if (false) throw new UserError"
+    },
+    {
+      "name": "score: refuses cleanly before the engine has run",
+      "file": "scripts/cmd/bench.mjs",
+      "from": "if (!fs.existsSync(path.join(runDir, 'results.json'))) throw new UserError",
+      "to": "if (false) throw new UserError"
     }
   ]
 }

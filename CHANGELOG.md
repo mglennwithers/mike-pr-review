@@ -9,6 +9,8 @@ Adds the logging of author/complexity/finding types, `prr calibrate`, and the `p
 - A third fixture, `parity`, whose seeded defects each need a second file to confirm.
 - `prr stats` reports API calls per agent and cost per call: an agent re-sends its whole context on every call, which is
   what makes a long review expensive, and nothing measured it before.
+- A reply is approved by its own token, minted by --dry-run over that thread and those exact words: the review's
+  approval does not authorise one, and changing a character of the text voids it.
 - The skill reads replies to its own comments instead of only counting them: a rebuttal reaches the follow-up agent,
   the finding is marked *disputed* with the agent's assessment, and `prr reply` answers the thread once, gated by the
   same approval token as posting a review.

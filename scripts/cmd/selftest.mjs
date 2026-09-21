@@ -644,16 +644,22 @@ export default async function selftest(argv = []) {
       const s1 = loadState(key), s2 = loadState(key)                       // two sessions load the same memory
       s1.findings.f1.status = 'posted'; s1.reviews.push({ at: '2026-01-01T00:00:00Z', head: 'aaa', posted: true }); saveState(s1)
       s2.findings.f2 = { fp: 'f2', status: 'dismissed' }; s2.reviews.push({ at: '2026-01-02T00:00:00Z', head: 'bbb' }); saveState(s2)   // s2 still believes f1 is pending
+      const b1 = loadState(key); b1.findings.f1.replied_at = '2026-02-01T00:00:00Z'; b1.findings.f1.reply_comment_id = 77
+      const b2 = loadState(key)                                            // taken before b1 saved: same rev, same status
+      saveState(b1)
+      b2.findings.f2.status = 'posted'; saveState(b2)                      // a status TIE on f1: nothing outranks anything
       const merged = loadState(key)
       fs.writeFileSync(statePath(key), '{"v":1,"key":"x","reviews":[')       // a torn write from a killed process
       const afterDamage = loadState(key)
-      console.log(JSON.stringify({ f1: merged.findings.f1.status, f2: merged.findings.f2.status, reviews: merged.reviews.map((r) => r.head), rev: merged.rev,
+      console.log(JSON.stringify({ f1: merged.findings.f1.status, f2: merged.findings.f2.status, replied_at: merged.findings.f1.replied_at || null, reply_comment_id: merged.findings.f1.reply_comment_id || null, reviews: merged.reviews.map((r) => r.head), rev: merged.rev,
         damaged_reviews: afterDamage.reviews.length, set_aside: !!afterDamage.recovered_from && fs.existsSync(afterDamage.recovered_from),
         leftovers: fs.readdirSync(path.dirname(statePath(key))).filter((n) => n.endsWith('.tmp')).length }))`
     r = run(process.execPath, ['--input-type=module', '-e', script], { cwd: tmp, env, allowFail: true }); assert.equal(r.code, 0, r.stderr)
     const mem = JSON.parse(r.stdout)
     assert.equal(mem.f1, 'posted', 'a finding another session posted must not fall back to pending (it would be posted twice)')
-    assert.equal(mem.f2, 'dismissed'); assert.deepEqual(mem.reviews, ['aaa', 'bbb']); assert.equal(mem.rev, 3)
+    assert.equal(mem.f2, 'posted'); assert.deepEqual(mem.reviews, ['aaa', 'bbb']); assert.equal(mem.rev, 5)
+    assert.equal(mem.replied_at, '2026-02-01T00:00:00Z', 'a thread another session answered must stay answered, or the next review answers it again')
+    assert.equal(mem.reply_comment_id, 77)
     assert.equal(mem.damaged_reviews, 0); assert.ok(mem.set_aside, 'an unreadable memory file is kept aside, not overwritten'); assert.equal(mem.leftovers, 0, 'atomic writes leave no temp files')
     ok('review memory: concurrent sessions are merged (posted beats pending); a damaged file is set aside; writes are atomic')
 
@@ -1011,9 +1017,15 @@ async function prModeOffline({ tmp, repo, git, prr, ok, home }) {
   r = prr('reply', '--run', dir, '--fp', postedFp); assert.notEqual(r.code, 0); assert.match(r.stderr + r.stdout, /--body/)
   r = prr('reply', '--run', dir, '--fp', postedFp, '--body', 'src/api.js:12 validates a, not b.')
   assert.equal(r.code, 10, r.stderr + r.stdout); assert.match(r.stderr + r.stdout, /needs --approval/)
-  const replyToken = JSON.parse(fs.readFileSync(path.join(dir, 'approval.json'), 'utf8')).token
+  const reviewToken = JSON.parse(fs.readFileSync(path.join(dir, 'approval.json'), 'utf8')).token
+  r = prr('reply', '--run', dir, '--fp', postedFp, '--body', 'src/api.js:12 validates a, not b.', '--approval', reviewToken)
+  assert.equal(r.code, 10, 'the review token says the user saw a report, not that they approved this sentence')
+  assert.match(r.stderr + r.stdout, /does not work here/)
   r = prr('reply', '--run', dir, '--fp', postedFp, '--body', 'src/api.js:12 validates a, not b.', '--dry-run')
-  assert.equal(r.code, 0, r.stderr); assert.match(r.stdout, /DRY RUN/)
+  assert.equal(r.code, 0, r.stderr); assert.match(r.stdout, /DRY RUN/); assert.match(r.stdout, /validates a, not b/, 'the proposal shows the exact words')
+  const replyToken = r.stdout.match(/--approval ([0-9a-f]{8})/)[1]
+  r = prr('reply', '--run', dir, '--fp', postedFp, '--body', 'src/api.js:12 validates a, not b, and you should know better.', '--approval', replyToken)
+  assert.equal(r.code, 10, 'a token minted for one wording must not send another'); assert.match(r.stderr + r.stdout, /wording has changed/)
   // a thread this reviewer already answered is not answered again: that is how a review turns into an argument
   const stFile = fs.readdirSync(path.join(home, 'state')).filter((n) => n.endsWith('.json')).map((n) => path.join(home, 'state', n)).find((p) => /#7$|-pr7/.test(JSON.parse(fs.readFileSync(p, 'utf8')).key))
   const st = JSON.parse(fs.readFileSync(stFile, 'utf8')); st.findings[postedFp].replied_at = '2026-01-05T00:00:00Z'
@@ -1184,7 +1196,10 @@ async function prModeOffline({ tmp, repo, git, prr, ok, home }) {
   assert.deepEqual(theirCtx.files.map((f) => f.path).sort(), ['src/gone.js', 'src/list.js'], 'diff.noprefix in the user\'s config must not change the parsed paths')
   assert.deepEqual(theirCtx.files.find((f) => f.path === 'src/list.js').changed_ranges, [[8, 8]], 'diff.suppressBlankEmpty must not shift line numbers')
   assert.ok(fs.existsSync(path.join(theirRun, 'wt', 'src', 'list.js')) && !fs.existsSync(hookProof), 'the user\'s post-checkout hook must not run in the review checkout')
-  r = asThem('render', '--run', theirRun); fs.writeFileSync(path.join(theirRun, 'results.json'), JSON.stringify({ v: 1, lens_runs: [], findings: [], covered: [], dropped: [], followup: [], brief: null }))
+  r = asThem('render', '--run', theirRun)
+  assert.equal(r.code, 2, 'rendering before the engine has run is a clean refusal, not a stack trace'); assert.match(r.stderr + r.stdout, /No results for this run yet/)
+  assert.equal(asThem('score', '--run', theirRun).code, 2, 'and scoring it is refused the same way')
+  fs.writeFileSync(path.join(theirRun, 'results.json'), JSON.stringify({ v: 1, lens_runs: [], findings: [], covered: [], dropped: [], followup: [], brief: null }))
   r = asThem('render', '--run', theirRun); assert.match(r.stdout, /prr post --run "[^"]*pr review home[^"]*" --event NONE/, 'printed follow-up commands quote a run directory that contains spaces')
   asThem('cleanup', '--run', theirRun)
   ok('portability: no git identity, signed commits, prefix-less and blank-suppressed diffs, a checkout hook and spaces in every path')

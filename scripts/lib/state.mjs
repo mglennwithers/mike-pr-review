@@ -63,7 +63,10 @@ function saveStateLocked(state) {
     state.reviews = [...disk.reviews.filter((r) => !seen.has(`${r.at}|${r.head}`)), ...state.reviews].sort((a, b) => String(a.at).localeCompare(String(b.at)))
     for (const [fp, theirs] of Object.entries(disk.findings || {})) {
       const mine = state.findings[fp]
-      if (!mine || (STATUS_RANK[theirs.status] || 0) > (STATUS_RANK[mine.status] || 0)) state.findings[fp] = theirs
+      if (!mine || (STATUS_RANK[theirs.status] || 0) > (STATUS_RANK[mine.status] || 0)) { state.findings[fp] = theirs; continue }
+      // Status rank is not the only fact worth keeping. These record that something was already SAID to the author, and
+      // losing one lets the next run say it again: they are true once set, so the disk's copy survives a status tie.
+      for (const k of ['replied_at', 'reply_comment_id', 'comment_id', 'posted_at']) if (theirs[k] && !mine[k]) mine[k] = theirs[k]
     }
   }
   state.rev = Math.max(state.rev || 0, (disk && disk.rev) || 0) + 1
