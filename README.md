@@ -396,4 +396,4 @@ How to read the results:
 
 ## License
 
-MIT — see [LICENSE](LICENSE). The seeded-bug fixtures under `evals/fixtures/` are covered by it too; they are synthetic and deliberately defective, as `evals/fixtures/README.md` explains.
+MIT — see [LICENSE](LICENSE). Security reports: [SECURITY.md](SECURITY.md). The seeded-bug fixtures under `evals/fixtures/` are covered by it too; they are synthetic and deliberately defective, as `evals/fixtures/README.md` explains.
