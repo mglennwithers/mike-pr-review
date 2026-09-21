@@ -360,7 +360,7 @@ const REF = { type: 'object', properties: { id: { type: 'string' }, by: { type: 
 const DEDUPE_SCHEMA = { type: 'object', properties: { covered: { type: 'array', items: REF }, reintroduced: { type: 'array', items: REF } }, required: ['covered'] }
 const FOLLOWUP_SCHEMA = {
   type: 'object',
-  properties: { items: { type: 'array', items: { type: 'object', properties: { fp: { type: 'string' }, status: { type: 'string', enum: ['addressed', 'still_open', 'partially', 'unclear'] }, note: { type: 'string' } }, required: ['fp', 'status'] } } },
+  properties: { items: { type: 'array', items: { type: 'object', properties: { fp: { type: 'string' }, status: { type: 'string', enum: ['addressed', 'still_open', 'partially', 'unclear', 'disputed'] }, note: { type: 'string' } }, required: ['fp', 'status'] } } },
   required: ['items'],
 }
 const CRITIC_SCHEMA = {

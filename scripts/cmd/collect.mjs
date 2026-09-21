@@ -164,7 +164,7 @@ async function collectPr(ctx, t, args, cwd, runDir) {
   }
   range.commits = G.commitsBetween(repoDir, range.from, head).slice(0, 100)
   ctx.range = range
-  ctx.prior = priorSummary(state, last, runDir)
+  ctx.prior = priorSummary(state, last, runDir, comments, pr.viewer)
 
   const fullDiff = G.diffText(repoDir, fullFrom, head)
   writeText(path.join(runDir, 'full.diff'), fullDiff)
@@ -338,12 +338,23 @@ function collectLocal(ctx, scope, args, cwd, runDir) {
 
 // ---- shared ---------------------------------------------------------------------------------------------------------
 
-function priorSummary(state, last, runDir) {
+function priorSummary(state, last, runDir, comments = [], viewer = null) {
   const open = Object.values(state.findings).filter((f) => ['posted', 'pending'].includes(f.status))
-  const brief = (f) => ({ fp: f.fp, path: f.path, line: f.line, title: f.title, severity: f.severity, category: f.category, status: f.status, anchor: f.anchor || '', summary: f.summary || '', scenario: f.scenario || '' })
+  // A reply to one of our comments is the author telling us we were wrong (or right). It was counted before and never
+  // read: re-raising a finding somebody rebutted, without answering the rebuttal, is how a reviewer loses its welcome.
+  const mine = (c) => viewer && String(c.user || '').toLowerCase() === String(viewer).toLowerCase()
+  const repliesTo = (f) => {
+    const ours = comments.filter((c) => c.kind === 'inline' && ((f.comment_id && c.id === f.comment_id) || (mine(c) && (c.body || '').includes(`pr-review:fp=${f.fp}`))))
+    if (!ours.length) return []
+    const ids = new Set(ours.map((c) => c.id))
+    return comments.filter((c) => c.in_reply_to && ids.has(c.in_reply_to) && !mine(c))
+      .sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')))
+      .slice(0, 10).map((c) => ({ user: c.user || '', at: c.created_at || null, body: truncate(c.body || '', 1200) }))
+  }
+  const brief = (f) => { const replies = repliesTo(f); return { fp: f.fp, path: f.path, line: f.line, title: f.title, severity: f.severity, category: f.category, status: f.status, anchor: f.anchor || '', summary: f.summary || '', scenario: f.scenario || '', ...(replies.length ? { replies } : {}) } }
   writeJson(path.join(runDir, 'prior.json'), { open: open.map(brief), dismissed: Object.values(state.findings).filter((f) => f.status === 'dismissed').map(brief) })
   return { reviews: state.reviews.length, last_reviewed_head: last ? last.head : null, last_event: last ? last.event : null, last_run_dir: last && last.run_dir ? last.run_dir : null,
-    open_findings: open.map((f) => ({ fp: f.fp, path: f.path, line: f.line, title: f.title, severity: f.severity, status: f.status, comment_id: f.comment_id || null })),
+    open_findings: open.map((f) => ({ fp: f.fp, path: f.path, line: f.line, title: f.title, severity: f.severity, status: f.status, comment_id: f.comment_id || null, replies: repliesTo(f) })),
     dismissed: Object.values(state.findings).filter((f) => f.status === 'dismissed').length }
 }
 

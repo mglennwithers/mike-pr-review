@@ -30,6 +30,7 @@ const HELP = `pr-review helper
   build-workflow [--check]                                                         regenerate workflows/review.workflow.js from its template + lib/core.mjs (--check: only verify it is current)
   selftest  [--show]                                                               run the offline self-test (--show prints the sample report)
   version                                                                          print the skill's version (the VERSION file)
+  reply     --run <dir> [--list] [--fp <fp> --body "<text>" --approval <token>] [--dry-run]   answer a human who replied to one of our review comments
   trust     list | add <login> [--repo owner/name] | remove <login> [--repo owner/name]   whose same-repo PR branches may have their tests run (default: only your own)
   mutate    [--only <regex>] [--jobs N] [--timeout <seconds>] [--list] [--check] [--keep]   undo each behaviour in evals/mutants.json on a COPY; the selftest must fail`
 
@@ -80,6 +81,7 @@ async function main() {
     }
     case 'build-workflow': return (await import('./cmd/build-workflow.mjs')).default(rest)
     case 'selftest': return (await import('./cmd/selftest.mjs')).default(rest)
+    case 'reply': return (await import('./cmd/reply.mjs')).default(rest)
     case 'mutate': return (await import('./cmd/mutate.mjs')).default(rest)
     case 'version': case '--version': return console.log(fs.readFileSync(path.join(SKILL_DIR, 'VERSION'), 'utf8').trim())
     case 'trust': {

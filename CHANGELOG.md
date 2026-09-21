@@ -7,6 +7,9 @@ Adds the logging of author/complexity/finding types, `prr calibrate`, and the `p
 - `prr calibrate`: feeds the verifiers claims of known truth and reports how many invented ones they stopped and how
   many real ones they kept, so "only findings that survive verification are posted" can be measured rather than assumed.
 - A third fixture, `parity`, whose seeded defects each need a second file to confirm.
+- The skill reads replies to its own comments instead of only counting them: a rebuttal reaches the follow-up agent,
+  the finding is marked *disputed* with the agent's assessment, and `prr reply` answers the thread once, gated by the
+  same approval token as posting a review.
 - Every review record also logs the PR author, the change's complexity, and findings counted per finding by category, final severity, verification status and your decision; `prr stats` reports all three.
 
 ## 0.1.0

@@ -148,7 +148,7 @@ export function prepare(runDir) {
   if ((results.chores_failed || []).includes('critic-later')) notices.push('The completeness critic ran, but a later round of it did not (its agent failed twice): the gaps it found first were followed up and are in this report; the further look was not taken.')
   if ((results.chores_failed || []).includes('followup')) notices.push('The follow-up on earlier findings did not run (its agent failed); "Since the last review" shows them as not re-checked.')
 
-  const priorOpen = (ctx.prior.open_findings || []).map((p) => ({ ...p, follow: followup.get(p.fp) || null }))
+  const priorOpen = (ctx.prior.open_findings || []).map((p) => ({ ...p, follow: followup.get(p.fp) || null, replies: p.replies || [] }))
   const stillOpenRed = priorOpen.some((p) => p.severity === 'red' && p.status === 'posted' && (!p.follow || p.follow.status !== 'addressed'))
 
   // What may legally be posted, and what we would recommend.
@@ -226,7 +226,7 @@ export function terminalReport(R) {
   if ((R.results.dropped || []).length) section('Not verified (over the profile\'s candidate cap)', R.results.dropped, (f) => [`- \`${f.path}:${f.line}\` ${f.title}`])
   if (R.priorOpen.length) {
     L.push('', `## Since the last review (${R.priorOpen.length} earlier finding(s))`)
-    for (const p of R.priorOpen) L.push(`- ${p.follow ? ({ addressed: '✅ addressed', still_open: '⏳ still open', partially: '🟠 partially addressed', unclear: '❔ unclear' }[p.follow.status] || p.follow.status) : '❔ not re-checked'} — \`${p.path}:${p.line}\` ${p.title}${p.follow && p.follow.note ? ` — ${p.follow.note}` : ''}`)
+    for (const p of R.priorOpen) L.push(`- ${p.follow ? ({ addressed: '✅ addressed', still_open: '⏳ still open', partially: '🟠 partially addressed', unclear: '❔ unclear', disputed: '💬 disputed by the author' }[p.follow.status] || p.follow.status) : '❔ not re-checked'} — \`${p.path}:${p.line}\` ${p.title}${p.follow && p.follow.note ? ` — ${p.follow.note}` : ''}`)
   }
   for (const w of [...R.notices, ...ctx.warnings]) L.push('', `> ⚠ ${w}`)
   L.push('', '---', `RECOMMENDED_ACTION=${R.recommend} — ${R.because}`, `LEGAL_EVENTS=${R.legal.join(',') || 'none'}${R.blockers.length ? ` (${R.blockers.join('; ')})` : ''}`)
@@ -252,6 +252,9 @@ const suggestionOf = (f) => (f.suggestion && !f.suggestion_rejected && !/pr-revi
 // What will happen to a finding's suggested fix when it is posted — shown to the user BEFORE they approve.
 export const suggestionFate = (f) => (!f.suggestion ? '' : f.suggestion_rejected ? 'withheld (a verifier checked the suggested fix and judged it wrong)'
   : !suggestionOf(f) ? 'withheld (contains review-marker text)' : f.suggestion_ok && f.inline !== false && f.exact ? 'one-click suggestion' : f.suggestion_ok ? 'possible fix (checked by a verifier)' : 'possible fix, marked as NOT checked by a verifier')
+
+// For text composed outside this module that is about to be published in the user's name (a reply to a thread).
+export const scrubText = (ctx, s) => { setScrub(ctx); return scrub(s) }
 
 export function githubComment(f) {
   const L = [`${GH[f.severity]} **${SEV_LABEL[f.severity]} · ${LENS_TITLES[f.category] || f.category}** — ${scrub(f.title)}`, '', scrub(f.body)]
@@ -304,7 +307,7 @@ export function githubSummary(R, event, items, { notes = true } = {}) {
     const fu = R.priorOpen.filter((p) => p.follow)
     if (fu.length) {
       L.push('', '### Since the last review')
-      for (const p of fu) L.push(`- ${{ addressed: ':white_check_mark: addressed', still_open: ':hourglass: still open', partially: ':large_orange_diamond: partially addressed', unclear: ':grey_question: unclear' }[p.follow.status] || p.follow.status} — \`${p.path}:${p.line}\` ${scrub(p.title)}`)
+      for (const p of fu) L.push(`- ${{ addressed: ':white_check_mark: addressed', still_open: ':hourglass: still open', partially: ':large_orange_diamond: partially addressed', unclear: ':grey_question: unclear', disputed: ':speech_balloon: answered below' }[p.follow.status] || p.follow.status} — \`${p.path}:${p.line}\` ${scrub(p.title)}`)
     }
   }
   const ran = lights.filter((l) => l.ok).length

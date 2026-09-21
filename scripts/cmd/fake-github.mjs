@@ -33,6 +33,7 @@ const server = http.createServer((req, res) => {
       return send(200, { id: 555, html_url: 'http://127.0.0.1/review/555' })
     }
     if (req.method === 'GET' && /\/reviews\/555\/comments$/.test(url)) return send(200, ((lastReview && lastReview.comments) || []).map((c, i) => ({ id: 9000 + i, body: c.body })))
+    if (req.method === 'POST' && /\/pulls\/\d+\/comments\/\d+\/replies$/.test(url)) return send(201, { id: 7777, body: body && body.body, in_reply_to_id: Number(url.split('/').slice(-2)[0]) })
     if (req.method === 'POST' && url === '/graphql') {
       if (s.graphql === 'fail') return send(502, { message: 'Bad gateway' })
       if (s.graphql === 'errors') return send(200, { data: null, errors: [{ message: 'API rate limit exceeded' }] })
